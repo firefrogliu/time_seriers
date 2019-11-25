@@ -1,5 +1,39 @@
-from utils import *
 import csv
+from constants import *
+import sys
+
+def combine_two_wind_tprh_nwp(first,second,target):
+    first_f = open(first,'r')
+    second_f = open(second,'r')
+    target_f = open(target,'w')
+    first_csv = list(csv.reader(first_f))
+    second_csv = list(csv.reader(second_f))
+    target_csv = csv.writer(target_f)
+    second_csv.pop(0)
+    first_csv.extend(second_csv)
+    target_csv.writerows(first_csv)
+
+    first_f.close()
+    second_f.close()
+    target_f.close()
+    
+
+    # rows = []
+    # for row in first_csv:
+    #     rows.append(row)
+    
+    # i = 0
+    # for row in second_csv:
+    #     if i == 0:
+    #         continue
+        
+    #     rows.append(row)
+    
+    #print(rows[-10:])    
+
+    pass
+
+
 
 def combine_wind_tprh_nwp(wind_tprh_csv,nwp_csv, wind_tprh_csv_out):
     wind_tprh_f = open(wind_tprh_csv, 'r')
@@ -19,7 +53,7 @@ def combine_wind_tprh_nwp(wind_tprh_csv,nwp_csv, wind_tprh_csv_out):
     while i < len(wind_tprh_list):
         wind_tprh_info = wind_tprh_list[i]
         nwp_info = nwp_list[i][1:]
-        print('dealing',wind_tprh_info,nwp_info)
+        #print('dealing',wind_tprh_info,nwp_info)
         
         tmp = []
         tmp.extend(wind_tprh_info)
@@ -36,9 +70,9 @@ def combine_wind_tprh_nwp(wind_tprh_csv,nwp_csv, wind_tprh_csv_out):
 
     pass
 
-def combine_wind_tprh(TPRH_CSV,WIND_CSV, wind_tprh_out):
-    wind_f = open(WIND_CSV, 'r')
-    tprh_f = open(TPRH_CSV, 'r')
+def combine_wind_tprh(tprh_csv,wind_csv, wind_tprh_out):
+    wind_f = open(wind_csv, 'r')
+    tprh_f = open(tprh_csv, 'r')
     wind_tprh_f = open(wind_tprh_out, 'w')
     
     wind_c = csv.reader(wind_f)
@@ -52,10 +86,10 @@ def combine_wind_tprh(TPRH_CSV,WIND_CSV, wind_tprh_out):
     wind_tprh_data = [['data-time','wind','ap','tmp','humi']]
 
     i = 1
-    while i < len(wind_list):
+    while i < len(wind_list):        
         wind_info = wind_list[i]
         tprh_info = tprh_list[i]
-        print('dealing',wind_info,tprh_info)
+        #print('dealing',wind_info,tprh_info)
         
         dataTime = wind_info[0]
         wind = wind_info[1]
@@ -82,7 +116,7 @@ def clean_tprh_data(tprh_raw,tprh_out):
     humi_data = []
     
     for info in tprh_f:
-        print('dealing', info)
+        #print('dealing', info)
         info = info.split()
         
         date_data.append(info[0])
@@ -123,7 +157,7 @@ def clean_wind_data(wind_raw,wind_out):
 
     for wind in wind_f:
         wind = wind.split()
-        print(wind)
+        #print(wind)
         date_data.append(wind[0])
         time_data.append(wind[1])
         if len(wind) > 2:
@@ -137,8 +171,10 @@ def clean_wind_data(wind_raw,wind_out):
     WIND_CSV_data = [['date-time','wind']]    
     for i in range(len(wind_data)):  
         date_time  = date_data[i]+'-'+time_data[i]
-        print('processing',date_time)
+        #print('processing',date_time)
         wind = wind_data[i]
+        if wind > 100:
+            print('found a wind bigger than 100 in which is', wind, wind_raw, i, 'line')
         if wind < WIND_MIN or wind > WIND_MAX:
             prev = i - 1
             after = i + 1
@@ -147,15 +183,24 @@ def clean_wind_data(wind_raw,wind_out):
             while prev >= 0:
                 if wind_data[prev] >= WIND_MIN and wind_data[prev] <= WIND_MAX:
                     wind_prev = wind_data[prev]
+                    if wind > 100:
+                        print('wind prev is', wind_prev)
                     break
+                prev -= 1
             while after < len(wind_data):
                 if wind_data[after] >= WIND_MIN and wind_data[after] <= WIND_MAX:
                     wind_after = wind_data[after]
+                    if wind > 100:
+                        print('wind after is ', wind_after)
                     break
+                after += 1
             
             wind_data[i] = (wind_after + wind_prev)/2
+            if wind > 100:
+                print('wind is', wind_data[i])
+                
         
-        WIND_CSV_data.append([date_time,wind])
+        WIND_CSV_data.append([date_time,wind_data[i]])
 
     with open(wind_out, 'w') as csvFile:
         writer = csv.writer(csvFile)
@@ -206,7 +251,7 @@ def clean_nwp_data(nwp_raw,nwp_out):
 
                 if row < len(nwp_data) - 8:
                     if hour <= 11:
-                        print("processing", date,hour  )
+                        #print("processing", date,hour  )
                         value = float(nwp_yesterday36_hours[12 + hour])
                     else:                       
                         value = float(nwp_today36_hours[hour - 12])
@@ -229,10 +274,13 @@ def clean_nwp_data(nwp_raw,nwp_out):
 
 
 if __name__ == '__main__':
+
+
     #clean_wind_data(DATAPATH+WIND_TXT,  DATAPATH+WIND_CSV)
     #clean_nwp_data(DATAPATH+NWP_TXT, DATAPATH+NWP_CSV)
     #clean_tprh_data(DATAPATH + TPRH_TXT, DATAPATH + TPRH_CSV)
     #combine_wind_tprh(DATAPATH +TPRH_CSV,DATAPATH + WIND_CSV, DATAPATH + WIND_TPRH_CSV)
     combine_wind_tprh_nwp(DATAPATH +WIND_TPRH_CSV,DATAPATH + NWP_CSV, DATAPATH + WIND_TPRH_NWP_CSV)
+    pass
 
 
