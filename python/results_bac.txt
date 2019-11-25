@@ -1,0 +1,40 @@
+site0
+    Test Score: 1.358 RMSE
+    npw Score : 1.489 RMSE
+    Big Wind Test Score: 3.759 RMSE
+    Big Wind npw Score : 4.556 RMSE
+
+site1
+    Test Score: 1.227 RMSE
+    npw Score : 1.526 RMSE
+    Big Wind Test Score: 2.942 RMSE
+    Big Wind npw Score : 3.443 RMSE
+
+site2
+    Test Score: 0.948 RMSE
+    npw Score : 1.310 RMSE
+
+site03
+    Test Score: 1.211 RMSE
+    npw Score : 1.257 RMSE
+    Big Wind Test Score: 3.014 RMSE
+    Big Wind npw Score : 3.705 RMSE
+
+site4
+    Test Score: 1.046 RMSE
+    npw Score : 1.205 RMSE
+    Big Wind Test Score: 4.050 RMSE
+    Big Wind npw Score : 5.127 RMSE
+
+site5
+    Test Score: 1.579 RMSE
+    npw Score : 1.966 RMSE
+    Big Wind Test Score: 4.371 RMSE
+    Big Wind npw Score : 4.314 RMSE
+site6
+    Test Score: 4.891 RMSE
+    npw Score : 4.961 RMSE
+    Big Wind Test Score: 150.629 RMSE
+    Big Wind npw Score : 152.144 RMSE
+
+

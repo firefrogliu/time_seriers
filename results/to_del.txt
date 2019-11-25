@@ -1,0 +1,5 @@
+site 0
+Test Score: 1.358 RMSE
+npw Score : 1.489 RMSE
+Big Wind Test Score: 2.119 RMSE
+Big Wind npw Score : 2.380 RMSE
