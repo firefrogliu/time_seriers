@@ -31,3 +31,14 @@ WIND_TPRH_NWP_VAL_CSV = 'wind_tprh_nwp_val.csv'
 WIND_TPRH_NWP_ALLYEAR_CSV = 'wind_tprh_nwp_allyear.csv'
 
 TRAIN_TEST_SIZE = 5904
+
+NWP_START_INDEX = 6 #tell where the nwp info start in the wind_tprh_nwp.csv file
+
+UPDATE_OBS_RAW = 'obs_update.txt'
+UPDATE_OBS_VAL_RAW = 'obs_val_update.txt'
+UPDATE_OBS_CSV = 'obs_update_allyear.csv'
+
+UPDATA_OBS_NWP_ALLYEAR_CSV = 'obs_update_nwp_allyear.csv'
+
+CSV_COLUMNS = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp', 'residual']
+

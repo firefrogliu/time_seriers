@@ -211,6 +211,74 @@ def getNwpdate(date_str):
     date = date / 100
     return int(date)
 
+def clean_update_obs_data(update_obs_raw, update_obs_val_raw, update_obs_out):
+    obs_data = []
+    with open(update_obs_raw, 'r') as obs_f:
+        for i in obs_f:
+            obs_data.append(i)
+
+    with open(update_obs_val_raw, 'r') as obs_f:
+        for i in obs_f:
+            obs_data.append(i)
+    
+    row = 0     
+    obs_csv_data = [['data-time','wind','dir','slp','t2', 'rh2', 'td2']]
+    while row < len(obs_data):         
+        
+        for hour in range(24):
+
+            date = getNwpdate(obs_data[row].split()[0])
+
+            obs_row_data = [str(date)+'-'+str(hour)]                    
+            
+            offset = 0
+            while offset < 6:
+                
+                current_row = row + offset
+                value = 0
+                info = obs_data[current_row]
+                info = info.split()
+                info = info[2:]
+                value = float(info[hour])
+                if offset == 0:
+                    if value < 0:
+                        pre_wind = 0
+                        after_wind = 0
+                        pre_row = row - 6
+                        after_row = row + 6
+                        
+                        #deal with missing value
+                        while pre_row > 0:
+                            #print(obs_data[pre_row])
+                            #print('obs_data[after_row][2 + hour]',obs_data[after_row][2 + hour])
+                            wind_tmp = float(obs_data[pre_row].split()[2 + hour])
+                            if wind_tmp > 0:
+                                pre_wind = wind_tmp
+                                break
+                            
+                            pre_row -= 6
+                        
+                        while after_row < len(obs_data):
+                            #print(obs_data[after_row])
+                            
+                            wind_tmp = float(obs_data[after_row].split()[2 + hour])
+                            if wind_tmp > 0:
+                                after_wind = wind_tmp
+                                break
+                            after_row += 6
+                        
+                        value = pre_wind + after_wind
+
+                obs_row_data.append(value)
+                offset += 1
+
+            
+            obs_csv_data.append(obs_row_data)        
+        row += 6
+
+    with open(update_obs_out, 'w') as csvFile:
+        writer = csv.writer(csvFile)
+        writer.writerows(obs_csv_data)
 
 def clean_nwp_data(nwp_raw,nwp_out):
     nwp_data = []
@@ -270,6 +338,52 @@ def clean_nwp_data(nwp_raw,nwp_out):
     with open(nwp_out, 'w') as csvFile:
         writer = csv.writer(csvFile)
         writer.writerows(NWP_CSV_data)
+    pass
+
+
+def combine_updateobs_nwp_allyear(update_obs_allyear, wind_tprh_nwp_allyear, update_obs_nwp_allyear):
+    update_obs_allyear_f = open(update_obs_allyear, 'r')
+    wind_tprh_nwp_allyear_f = open(wind_tprh_nwp_allyear, 'r')
+    update_obs_allyear_csv_f = open(update_obs_nwp_allyear, 'w')
+    
+    update_obs_allyear_c = csv.reader(update_obs_allyear_f)
+    wind_tprh_nwp_allyear_c = csv.reader(wind_tprh_nwp_allyear_f)
+    update_obs_allyear_csv_c = csv.writer(update_obs_allyear_csv_f)
+
+    update_obs_allyear_list = list(update_obs_allyear_c)
+    wind_tprh_nwp_allyear_list = list(wind_tprh_nwp_allyear_c)
+    
+
+    update_obs_allyear_data = [['data-time','wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp', 'residual']]
+    i = 1
+    while i < len(update_obs_allyear_list):
+        date = wind_tprh_nwp_allyear_list[i][0]
+        update_obs_allyear_info = update_obs_allyear_list[i][1:]
+        nwp_info = wind_tprh_nwp_allyear_list[i][5:]
+        #print('dealing',update_obs_allyear_info,nwp_info)
+        
+        tmp = [date]
+        tmp.extend(update_obs_allyear_info)
+        tmp.extend(nwp_info)
+
+        #add residual column, which is resisted     
+        wind = float(update_obs_allyear_info[0])
+        nwp_wind = float(nwp_info[0])
+
+        residual = wind - nwp_wind
+
+        tmp.append(residual)
+        
+
+        update_obs_allyear_data.append(tmp)
+        i = i + 1
+    
+    update_obs_allyear_csv_c.writerows(update_obs_allyear_data)
+
+    update_obs_allyear_f.close()
+    wind_tprh_nwp_allyear_f.close()
+    update_obs_allyear_csv_f.close()
+
     pass
 
 

@@ -4,26 +4,31 @@ import matplotlib.pyplot as plt
 import csv
 # LSTM for international airline passengers problem with regression framing
 import numpy
-import matplotlib.pyplot as plt
 from pandas import read_csv
-import math
 import keras
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, RepeatVector, TimeDistributed
 from keras.layers import LSTM,CuDNNLSTM
 from keras import backend as K
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error
+import math
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 import sys
 from dataclasses import dataclass
 import logging
 from tensorflow.python.client import device_lib
 from pyplotz.pyplotz import PyplotZ
 from clean_val_data import get_val_testX
+
+from detrend import moving_average, emd_detrend, ceemd_detrend, vmd_detrend
 import pickle
+import random
 
 
+from garget import *
 from keras import backend as K
+
+from prophet_model import *
 
 def recall_m(y_true, y_pred):
         true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
@@ -54,7 +59,7 @@ class Lstm_model_disc:
     min_wind: int = 0 
     max_wind: int = 100
     dropout: float =  0
-    train_test_split: float = 0.8
+    train_test_split: float = 0.67
 
 
     def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, site, min_wind, max_wind):
@@ -67,7 +72,8 @@ class Lstm_model_disc:
         self.min_wind = min_wind
         self.max_wind = max_wind   
         
-        self.wind_tprh_nwp_file = DATAPATH + site + WIND_TPRH_NWP_ALLYEAR_CSV
+        #self.wind_tprh_nwp_file = DATAPATH + site + WIND_TPRH_NWP_ALLYEAR_CSV
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
         self.model_name = 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'minWind' + str(self.min_wind) + 'maxWind' + str(self.max_wind)
         print('model name', self.model_name)
     
@@ -83,9 +89,103 @@ class Classification_model_disc(Lstm_model_disc):
         self.site = site
         self.wind_bar = wind_bar
         
-        self.wind_tprh_nwp_file = DATAPATH + site + WIND_TPRH_NWP_ALLYEAR_CSV
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
         self.model_name = 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'windBar' + str(self.wind_bar)
         print('model name', self.model_name)    
+
+    
+
+class Moving_ave_model_disc(Lstm_model_disc):
+    ma_window = 4
+
+    def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, site, ma_window):
+        self.predict_hour = predict_hour
+        self.window = window
+        self.dataset_len = dataset_len
+        self.epcoh = epcoh
+        self.dropout = dropout
+        self.site = site
+        self.ma_window = ma_window
+        
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
+        self.model_name = 'ma_' + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'maWin' + str(self.ma_window)
+        print('model name', self.model_name)    
+
+    def set_predict_hour(self,predict_hour):
+        self.predict_hour = predict_hour
+        #print('updateing name')
+    
+        self.__update_name()
+        #print('name is', self.model_name)
+    def __update_name(self):
+        self.model_name = 'ma_' + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'maWin' + str(self.ma_window)
+
+class Ma_res_model_disc(Moving_ave_model_disc):
+    def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, site, ma_window):
+        self.predict_hour = predict_hour
+        self.window = window
+        self.dataset_len = dataset_len
+        self.epcoh = epcoh
+        self.dropout = dropout
+        self.site = site
+        self.ma_window = ma_window
+        
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
+        self.model_name = 'maRes_' + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'maWin' + str(self.ma_window)
+        print('model name', self.model_name)   
+
+    def set_predict_hour(self,predict_hour):
+        self.predict_hour = predict_hour
+        print('updateing name')    
+        self.__update_name()
+        print('name is', self.model_name)
+
+
+    def __update_name(self):
+        self.model_name = 'maRes_' + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh) + 'drop'+ str(self.dropout*100) + 'maWin' + str(self.ma_window)
+
+class Seq2seq_model_disc(Lstm_model_disc):
+    look_forward = 24
+
+    def __init__(self, look_forward, window, dataset_len, epcoh, dropout, site):
+        self.look_forward = look_forward
+        self.window = window
+        self.dataset_len = dataset_len
+        self.epcoh = epcoh
+        self.dropout = dropout
+        self.site = site
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
+        self.model_name = 's2s_'+'lfwindow' + str(self.look_forward) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh)
+        print('model name', self.model_name)
+
+class Emd_model_disc(Lstm_model_disc):
+
+    imfs_idx = 0
+
+    def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, imfs_idx, site, train_test_split = 0.67):
+        self.predict_hour = predict_hour
+        self.window = window
+        self.dataset_len = dataset_len
+        self.epcoh = epcoh
+        self.dropout = dropout
+        self.site = site
+        self.imfs_idx = imfs_idx
+        self.train_test_split = train_test_split
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
+        self.model_name = 'emd_'+ str(self.imfs_idx) + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'train_len' + str(self.dataset_len * self.train_test_split) + 'eph' + str(self.epcoh)
+        print('model name', self.model_name)
+
+    def set_immfs_idx(self,imfs_idx):
+        self.imfs_idx = imfs_idx
+        print('updateing name')    
+        self.__update_name()
+        print('name is', self.model_name)
+
+
+    def __update_name(self):
+        self.model_name = 'emd_'+ str(self.imfs_idx) + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh)
+
+        
 
 # convert an array of values into a dataset matrix
 def create_dataset(dataset, window ,predict_hour=1, min_wind = 0, max_wind = 100):
@@ -113,10 +213,10 @@ def run_saved_classification_model(model_disc:Classification_model_disc, testX):
     testPredict = model.predict(testX)
     return testPredict
 
-def run_saved_model(model_disc: Lstm_model_disc, testX):
+def run_saved_model(model_disc: Lstm_model_disc, testX, Ycolumn = 'wind'):
     numpy.random.seed(7)
     # load the dataset
-    dataframeY = read_csv(model_disc.wind_tprh_nwp_file, usecols=['wind'], engine='python')
+    dataframeY = read_csv(model_disc.wind_tprh_nwp_file, usecols=[Ycolumn], engine='python')
     
     
     datasetY = dataframeY.values[:]
@@ -131,15 +231,7 @@ def run_saved_model(model_disc: Lstm_model_disc, testX):
     testPredict = scalerY.inverse_transform(testPredict)
     return testPredict
 
-# def create_multifeature_dataset(dataset, window,predict_hour = 1):
-#     dataX, dataY = [], []
-#     i = window
-#     while i < len(dataset)-predict_hour + 1:
-#         a = dataset[(i-window):(i), :]
-#         dataX.append(a)
-#         dataY.append(dataset[i+predict_hour-1, 0])
-#         i += 1
-#     return numpy.array(dataX), numpy.array(dataY)
+
 
 def creat_classification_dataset(dataset, nwp_start, window, predict_hour = 1, wind_bar = 4):
     dataX, dataY= [], []
@@ -163,24 +255,21 @@ def creat_classification_dataset(dataset, nwp_start, window, predict_hour = 1, w
         i += 1
     return numpy.array(dataX), numpy.array(dataY)
 
-def create_multifeature_nwp_dataset(dataset, nwp_start, window, predict_hour = 1, min_wind = 0, max_wind = 100):
+def create_multifeature_nwp_dataset(dataset, nwp_start, window, predict_hour = 1, Ycolumn_idx = 0, min_wind = 0, max_wind = 100, obs_end = 6, nwp_end = 7):
     dataX, dataY, nwpY = [], [], []
     i = window
+
+    print('yclumn idx is', Ycolumn_idx)
     #print('creating dataset min max', min_wind, max_wind)
     while i < len(dataset)-predict_hour + 1:
-        wind = dataset[i+predict_hour-1, 0]
 
-        if wind < min_wind or wind >= max_wind:
-            i = i + 1
-            #print('found wind', wind, 'bigger than 4')
-            continue
-        
+        wind = dataset[i+predict_hour-1, Ycolumn_idx]
+ 
         dataY.append(wind)
-        
-        nwp_predict = dataset[i + predict_hour - 1, nwp_start:]
+        nwp_predict = dataset[i + predict_hour - 1, [nwp_start, -1]]
         nwp_predict_wind = dataset[i + predict_hour - 1, nwp_start]
         nwpY.append(nwp_predict_wind)
-        a = dataset[(i-window):(i), : nwp_start]
+        a = dataset[(i-window):(i), [Ycolumn_idx,0,2,3]]
         
         obs_nwp_featue_list = []
         for row in a:
@@ -189,26 +278,15 @@ def create_multifeature_nwp_dataset(dataset, nwp_start, window, predict_hour = 1
         obs_nwp_featue = numpy.array(obs_nwp_featue_list)
         dataX.append(obs_nwp_featue)
 
-        # nwp_predict_wind = dataset[i + predict_hour - 1, nwp_start]
-        # nwpY.append(nwp_predict_wind)
-        # a = dataset[(i-window):(i), : nwp_start]
-        
-        # obs_nwp_featue_list = []
-
-        # nwp_pred_hour = 0
-        # for row in a:
-        #     nwp_predict = dataset[i - window +  nwp_pred_hour + predict_hour - 1, nwp_start:]
-        #     tmp = numpy.append(row, nwp_predict)
-        #     obs_nwp_featue_list.append(tmp)
-        #     nwp_pred_hour += 1
-        # obs_nwp_featue = numpy.array(obs_nwp_featue_list)
-        # dataX.append(obs_nwp_featue)
-
         i += 1
+
+
     return numpy.array(dataX), numpy.array(dataY), numpy.array(nwpY)
+
+
     
-def prepare_data(model_disc: Lstm_model_disc):
-    dataframe = read_csv(model_disc.wind_tprh_nwp_file, usecols = ['wind','ap','tmp','humi', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
+def prepare_data(model_disc: Lstm_model_disc, Ycolumn : str = 'wind'):
+    dataframe = read_csv(model_disc.wind_tprh_nwp_file, usecols = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp', 'residual'],engine='python')
     dataframeNwp = read_csv(model_disc.wind_tprh_nwp_file, usecols=['nwp_wind'], engine='python')
     
     dataset_len = model_disc.dataset_len
@@ -216,9 +294,13 @@ def prepare_data(model_disc: Lstm_model_disc):
     dataset = dataset.astype('float32')
     
     
-    dataframeY = read_csv(model_disc.wind_tprh_nwp_file, usecols=['wind'], engine='python')
+    dataframeY = read_csv(model_disc.wind_tprh_nwp_file, usecols=[Ycolumn], engine='python')
     datasetY = dataframeY.values[:]
     datasetY = datasetY.astype('float32')
+
+
+
+
     scalerY = MinMaxScaler(feature_range=(0, 1))
     datasetY = scalerY.fit_transform(datasetY)
     
@@ -227,10 +309,10 @@ def prepare_data(model_disc: Lstm_model_disc):
 
     # normalize the dataset
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scalerNwp = MinMaxScaler(feature_range=(0, 1))
     dataset = scaler.fit_transform(dataset)
-    scalerNwp.fit_transform(datasetNwp)
 
+    scalerNwp = MinMaxScaler(feature_range=(0, 1))
+    scalerNwp.fit_transform(datasetNwp)
     dataset = dataset[:dataset_len]
     datasetY = datasetY[:dataset_len]
     # split into train and test sets
@@ -254,16 +336,24 @@ def prepare_data(model_disc: Lstm_model_disc):
     max_wind = min_max[1][0]
     window = model_disc.window
     predict_hour = model_disc.predict_hour
-    trainX, trainY, dummy = create_multifeature_nwp_dataset(train, 4, window, predict_hour, min_wind, max_wind)
-    testX, testY, test_nwpY = create_multifeature_nwp_dataset(test, 4, window, predict_hour, min_wind, max_wind)
+
+    Ycolumn_idx = 0
+    if Ycolumn == 'residual':
+        Ycolumn_idx = 14
+        print('Ycolumn data', Ycolumn_idx)
     
-    print('trainX, trainY, testX, testY, nwpY',trainX.shape, trainY.shape, testX.shape, testY.shape, test_nwpY.shape)
-    #sys.exit()
+
+    trainX, trainY, dummy = create_multifeature_nwp_dataset(train, NWP_START_INDEX, window, predict_hour, Ycolumn_idx, min_wind, max_wind)
+    testX, testY, test_nwpY = create_multifeature_nwp_dataset(test, NWP_START_INDEX, window, predict_hour, Ycolumn_idx, min_wind, max_wind)
+    
+
+    #print('trainX, trainY, testX, testY, nwpY',trainX.shape, trainY.shape, testX.shape, testY.shape, test_nwpY.shape)
+    #print('trainX[0:5], trainY[0:5]', trainX[0:5], trainY[0:4])
     return window, predict_hour, dataset, trainX, trainY, testX, testY, test_nwpY,  train_size, scalerNwp, scalerY
 
 
 
-def train_results(model_disc: Lstm_model_disc, model: Sequential, window, predict_hour ,dataset, trainX, trainY, testX, testY, test_nwpY, train_size, scalerNwp, scalerY):
+def train_results(model_disc: Lstm_model_disc, model: Sequential, window, predict_hour ,dataset, trainX, trainY, testX, testY, test_nwpY, train_size, scalerNwp, scalerY, residual_Y  = False):
     trainPredict = model.predict(trainX)
     testPredict = model.predict(testX)
     print('train',trainPredict.shape)
@@ -278,6 +368,10 @@ def train_results(model_disc: Lstm_model_disc, model: Sequential, window, predic
 
     test_nwpY = scalerNwp.inverse_transform([test_nwpY])
     test_nwpY = numpy.transpose(test_nwpY)
+
+    if residual_Y:
+        testPredict = testPredict + test_nwpY
+        testY = testY + test_nwpY
     # calculate root mean squared error
     print('testPredict, testY, test_nwpY', testPredict.shape, testY.shape, test_nwpY.shape)    
     logging.info(model_disc.model_name)
@@ -332,19 +426,19 @@ def train_results(model_disc: Lstm_model_disc, model: Sequential, window, predic
         print('Small Wind npw Score : %.3f RMSE' % (sw_npwScore))
         logging.info('  Small Wind npw Score : %.3f RMSE' % (sw_npwScore))
     
-    #plt.clf()
-    #plt.plot(testY)    
-    #plt.plot(test_nwpY)
-    #plt.plot(testPredict)
-    #plt.savefig(RESULTPATH + model_disc.site + model_disc.model_name + '_' + '.pdf')
-    #plt.show()
+    # plt.clf()
+    # plt.plot(testY)    
+    # plt.plot(test_nwpY)
+    # plt.plot(testPredict)
+    # plt.savefig(RESULTPATH + model_disc.site + model_disc.model_name + '.png')
+    # plt.show()
     pass
 
 def lstm_multifeature(model_disc: Lstm_model_disc):
  
     print('failed loading model')
     
-    window, predict_hour, dataset, trainX, trainY, testX, testY, test_nwpY,  train_size, scalerNwp, scalerY = prepare_data(model_disc)
+    window, predict_hour, dataset, trainX, trainY, testX, testY, test_nwpY,  train_size, scalerNwp, scalerY = prepare_data(model_disc, 'residual')
     epoch = model_disc.epcoh
     print('training on', model_disc.model_name)
     numpy.random.seed(7)
@@ -355,16 +449,19 @@ def lstm_multifeature(model_disc: Lstm_model_disc):
     model.add(Dense(int(window/4)))
     model.add(Dense(1))
     model.compile(loss='mean_squared_error', optimizer='adam')
+    #print('trainX, trainY', trainX[0:10], trainY[0:10])
+    #sys.exit()
     model.fit(trainX, trainY, epochs= epoch, batch_size= 128, verbose=2)
     model.save(MODEL_PATH + model_disc.site + model_disc.model_name  +'.h5')
 
     #show train results
-    train_results(model_disc, model, window, predict_hour, dataset, trainX, trainY, testX, testY, test_nwpY,  train_size, scalerNwp, scalerY)
+    residual_Y = True
+    train_results(model_disc, model, window, predict_hour, dataset, trainX, trainY, testX, testY, test_nwpY,  train_size, scalerNwp, scalerY, residual_Y)
 
 
 
 def prepare_classification_data(model_disc: Classification_model_disc):
-    dataframe = read_csv(model_disc.wind_tprh_nwp_file, usecols = ['wind','ap','tmp','humi', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
+    dataframe = read_csv(model_disc.wind_tprh_nwp_file, usecols = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
     
     dataset_len = model_disc.dataset_len
     dataset = dataframe.values[:]
@@ -398,8 +495,8 @@ def prepare_classification_data(model_disc: Classification_model_disc):
 
     window = model_disc.window
     predict_hour = model_disc.predict_hour
-    trainX, trainY= creat_classification_dataset(train, 4, window, predict_hour, wind_bar)
-    testX, testY = creat_classification_dataset(test, 4, window, predict_hour, wind_bar)
+    trainX, trainY= creat_classification_dataset(train, NWP_START_INDEX, window, predict_hour, wind_bar)
+    testX, testY = creat_classification_dataset(test, NWP_START_INDEX, window, predict_hour, wind_bar)
     
     print('trainX, trainY, testX, testY',trainX.shape, trainY.shape, testX.shape, testY.shape)
     #sys.exit()
@@ -434,7 +531,7 @@ def lstm_classfier(model_disc: Lstm_model_disc):
 
 def load_classification_models_run(first_model_disc: Classification_model_disc):
     dataset_len = first_model_disc.dataset_len
-    dataframe = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = ['wind','ap','tmp','humi', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
+    dataframe = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
     dataset = dataframe.values[:]
     dataset = dataset.astype('float32')
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -472,14 +569,16 @@ def load_classification_models_run(first_model_disc: Classification_model_disc):
 
     return numpy.array(predict_classicfication)
 
-def validation_model(first_model_disc: Lstm_model_disc, predictY, sw = [], bw = [], classification = []):
+
+
+def validation_model(first_model_disc: Lstm_model_disc, predictY, Ycolumn = 'wind',sw = [], bw = [], classification = []):
 
     dataset_len = first_model_disc.dataset_len
     site = first_model_disc.site
     window = first_model_disc.window
     
 
-    dataframeY = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = ['wind'],engine='python')
+    dataframeY = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = [Ycolumn],engine='python')
     datasetY = dataframeY.values[:]
     datasetY = datasetY.astype('float32')
     validationY = datasetY[dataset_len + window:, :]
@@ -495,8 +594,14 @@ def validation_model(first_model_disc: Lstm_model_disc, predictY, sw = [], bw = 
     npwDataset = npwDataset.astype('float32')
     npw_validation_Y = npwDataset[dataset_len + window:,:]
 
-
     predictY = predictY[window:]
+
+    if Ycolumn == 'residual':
+        validationY = validationY + npw_validation_Y
+        #predictY = predictY / 2
+        predictY = predictY + npw_validation_Y
+        print('ycolumn si ', Ycolumn)
+
     if len(sw) > 0:
         sw = sw[window:]
     
@@ -577,19 +682,16 @@ def validation_model(first_model_disc: Lstm_model_disc, predictY, sw = [], bw = 
     
     plt.xlabel('Hours')
     plt.ylabel('Wind-speed')
-    #print(test_dates[:100])
     plt.legend(handles = legends)
-    plt.savefig(RESULTPATH + first_model_disc.site + '24modelResult.png')
-    # plt.clf()
-    # plt.plot(testY)
-    plt.show()
-    return testScore, npwScore, bw_testScore, bw_npwScore, sw_testScore, sw_npwScore,
+    plt.savefig(RESULTPATH + first_model_disc.site + first_model_disc.model_name+'24modelResult.png')
+    #plt.show()
+    return testScore, npwScore, bw_testScore, bw_npwScore, sw_testScore, sw_npwScore
     
 
-def load_models_and_run(first_model_disc: Lstm_model_disc):
+def load_models_and_run(first_model_disc: Lstm_model_disc, Ycolumn = 'wind'):
     dataset_len = first_model_disc.dataset_len
-    #dataframe = read_csv(model_disc.wind_tprh_file, usecols=['wind','ap','tmp','humi'], engine='python')     
-    dataframe = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = ['wind','ap','tmp','humi', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp'],engine='python')
+    #dataframe = read_csv(model_disc.wind_tprh_file, usecols=['wind','dir','slp','t2', 'rh2', 'td2'], engine='python')     
+    dataframe = read_csv(first_model_disc.wind_tprh_nwp_file, usecols = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp', 'residual'],engine='python')
     dataset = dataframe.values[:]
     dataset = dataset.astype('float32')
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -611,13 +713,15 @@ def load_models_and_run(first_model_disc: Lstm_model_disc):
         epcoh = first_model_disc.epcoh        
         site = first_model_disc.site
         dropout = first_model_disc.dropout
-
-        validationX, dummy, dummy2 = create_multifeature_nwp_dataset(validation, 4, window, predict_hour)
+        Ycolumn_idx = 0
+        if Ycolumn == 'residual':
+            Ycolumn_idx = 14
+        validationX, dummy, dummy2 = create_multifeature_nwp_dataset(validation, NWP_START_INDEX, window, predict_hour, Ycolumn_idx)
         model_disc = Lstm_model_disc(predict_hour, window, dataset_len, epcoh,dropout, site, first_model_disc.min_wind, first_model_disc.max_wind)
         # split into train and test sets
         # print('testX_0',testX_0)
         model_predict = [[0]] * (window + predict_hour - 1)
-        model_predict.extend(run_saved_model(model_disc, validationX))
+        model_predict.extend(run_saved_model(model_disc, validationX, Ycolumn))
         model_predicts.append(model_predict)
     
     hour = 1
@@ -634,36 +738,41 @@ def load_models_and_run(first_model_disc: Lstm_model_disc):
     return  numpy.array(predictY)
 
 
-def load_and_validate_model(first_wind_model: Lstm_model_disc):
-    try:
-        predictY = numpy.load(first_wind_model.model_name + 'predictY' + '.npy')
-    except:
-        predictY = load_models_and_run(first_wind_model)
-        numpy.save(first_wind_model.model_name + 'predictY', predictY) 
-    
-    validation_model(first_wind_model, predictY)
+def load_and_validate_model(first_wind_model: Lstm_model_disc, newlyTrained, Ycolumn = 'wind'):
+    if not newlyTrained:
+        try:
+            predictY = numpy.load(RESULTPATH + first_wind_model.site + 'tmp/' +first_wind_model.model_name + 'predictY' + '.npy')
+        except:
+            predictY = load_models_and_run(first_wind_model, Ycolumn)
+            numpy.save(RESULTPATH + first_wind_model.site + 'tmp/' +first_wind_model.model_name + 'predictY', predictY) 
+    else:
+        predictY = load_models_and_run(first_wind_model, Ycolumn)
+        numpy.save(RESULTPATH + first_wind_model.site + 'tmp/' +first_wind_model.model_name + 'predictY', predictY) 
+        
+    testScore, npwScore, bw_testScore, bw_npwScore, sw_testScore, sw_npwScore = validation_model(first_wind_model, predictY, Ycolumn)
+    return first_wind_model.site, testScore, npwScore, bw_testScore, bw_npwScore, sw_testScore, sw_npwScore
 
 
 def combin_two_models(small_wind_model: Lstm_model_disc, big_wind_model:Lstm_model_disc, classifcation_model: Classification_model_disc):
 
     try:
-        sw_predictY = numpy.load(small_wind_model.model_name + 'predictY' + '.npy')
+        sw_predictY = numpy.load(RESULTPATH + small_wind_model.site + 'tmp/' +small_wind_model.model_name + 'predictY' + '.npy')
     except:
         sw_predictY = load_models_and_run(small_wind_model)
-        numpy.save(small_wind_model.model_name + 'predictY', sw_predictY) 
+        numpy.save(RESULTPATH + small_wind_model.site + 'tmp/'+ small_wind_model.model_name + 'predictY', sw_predictY) 
     
 
     try:
-        bw_predictY = numpy.load(big_wind_model.model_name + 'predictY' + '.npy')
+        bw_predictY = numpy.load(RESULTPATH + big_wind_model.site + 'tmp/' +big_wind_model.model_name + 'predictY' + '.npy')
     except:
         bw_predictY = load_models_and_run(big_wind_model)
-        numpy.save(big_wind_model.model_name + 'predictY', bw_predictY) 
+        numpy.save(RESULTPATH + big_wind_model.site + 'tmp/' +big_wind_model.model_name + 'predictY', bw_predictY) 
     
     try:
-        predict_classicfication = numpy.load(classifcation_model.model_name + 'predictY' + '.npy')
+        predict_classicfication = numpy.load(RESULTPATH + classifcation_model.site + 'tmp/' +classifcation_model.model_name + 'predictY' + '.npy')
     except :
         predict_classicfication = load_classification_models_run(classifcation_model)
-        numpy.save(classifcation_model.model_name + 'predictY', predict_classicfication) # protocol 0 is printable ASCII
+        numpy.save(RESULTPATH + classifcation_model.site + 'tmp/' +classifcation_model.model_name + 'predictY', predict_classicfication) # protocol 0 is printable ASCII
 
     
     
@@ -686,45 +795,637 @@ def combin_two_models(small_wind_model: Lstm_model_disc, big_wind_model:Lstm_mod
     pass
 
 
-def cal_val_data(site, window,wind_tprh_val_csv, nwp_val_csv):
-    dataset_len = 5000
-    epcoh = 5
-    predict_hour = 1
-    dropout = 0.4
-    model_disc = Lstm_model_disc(predict_hour, window, dataset_len, epcoh, dropout, site)
-    dataX_24_hours = get_val_testX(wind_tprh_val_csv, nwp_val_csv)
+
+def read_dataframe(csvfile, datastart, dataend, ycolumn = 'wind'):
+    print('reawding', csvfile)
+    dataframe = read_csv(csvfile, usecols = CSV_COLUMNS,engine='python')
+    
+    dataset = dataframe.values[:]
+    dataset = dataset.astype('float32')
+    
+    dataframeY = read_csv(csvfile, usecols=[ycolumn], engine='python')
+    datasetY = dataframeY.values[:]
+    datasetY = datasetY.astype('float32')
+
+    if dataend == 'end':
+        dataset = dataset[datastart:, :]
+        datasetY = datasetY[datastart:, :]
+    else:   
+        dataset = dataset[datastart:dataend, :]
+        datasetY = datasetY[datastart:dataend, :]
+
+    return dataset, datasetY
+
+def prepare_ma_data(ma_model_disc:Moving_ave_model_disc, datastart, dataend, train_test_split):
+
+    dataset, wind_obs = read_dataframe(ma_model_disc.wind_tprh_nwp_file, datastart, dataend, 'wind')
+    scaler, scalerY = MinMaxScaler(feature_range=(0, 1)), MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+    wind_obs= scalerY.fit_transform(wind_obs)
+
+  
+    train_size = int(len(dataset) * train_test_split)
+    train, test = dataset[0:train_size,:], dataset[train_size:len(dataset),:]
+    
+    window = ma_model_disc.window
+    predict_hour = ma_model_disc.predict_hour
+    trainX, trainY, dummy = create_multifeature_nwp_dataset(train, NWP_START_INDEX, window, predict_hour)
+    testX, testY, dummy = create_multifeature_nwp_dataset(test, NWP_START_INDEX, window, predict_hour)
+    
+    #cal moving average and ma_residual
+    ma_window = ma_model_disc.ma_window
+
+    trainY, trainY_residual = moving_average(trainY, ma_window)
+    testY, testY_residual = moving_average(testY, ma_window)
+    
+    trainX, testX = trainX[ma_window-1:], testX[ma_window-1:]
+
+    plt.clf()
+    plt.plot(testY)
+    plt.plot(testY_residual)
+    #plt.show()
+    print(testY.shape)
+    
+    return  trainX, trainY, trainY_residual,testX, testY,testY_residual, scalerY
+    
+
+def train_ma_model(ma_model_disc:Moving_ave_model_disc, trainX, trainY):
+    epoch = ma_model_disc.epcoh
+    numpy.random.seed(7)
+    # create and fit the LSTM network
+
+    
+    print('training on', ma_model_disc.model_name)
+    #sys.exit()
+    window = ma_model_disc.window
+    model = Sequential()
+    model.add(CuDNNLSTM(200, input_shape=(trainX.shape[1], trainX.shape[2])))
+    model.add(Dense(int(100)))
+    #model.add(Dense(int(50)))
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    #print('trainX, trainY', trainX[0:10], trainY[0:10])
+    #sys.exit()
+    model.fit(trainX, trainY, epochs= epoch, batch_size= 128, verbose=2)
+    model.save(MODEL_PATH + ma_model_disc.site + ma_model_disc.model_name  +'.h5')
+    return model
+
+def train_ma_res_model(ma_res_model_disc:Ma_res_model_disc, trainX, trainY):
+    epoch = ma_res_model_disc.epcoh
+    numpy.random.seed(7)
+    # create and fit the LSTM network
+
+    print('trainX, trainY', trainX[0], trainY[0])
+    print('training on', ma_res_model_disc.model_name)
+    #sys.exit()
+    window = ma_res_model_disc.window
+    model = Sequential()
+    model.add(CuDNNLSTM(200, input_shape=(trainX.shape[1], trainX.shape[2])))
+    model.add(Dense(int(200/2)))
+    #model.add(Dense(int(50/4)))
+    model.add(Dense(1))
+
+    # model.add(LSTM(200, activation='relu', input_shape=(trainX.shape[1], trainX.shape[2])))
+    # model.add(RepeatVector(1))
+    # model.add(LSTM(200, activation='relu', return_sequences=True))
+    # model.add(TimeDistributed(Dense(100, activation='relu')))
+    # model.add(TimeDistributed(Dense(1)))
+
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    #print('trainX, trainY', trainX[0:10], trainY[0:10])
+    #sys.exit()
+
+    #trainY = trainY.reshape(trainX.shape[0], 1, 1)
+    model.fit(trainX, trainY, epochs= epoch, batch_size= 128, verbose=2)
+    model.save(MODEL_PATH + ma_res_model_disc.site + ma_res_model_disc.model_name  +'.h5')
+    return model
+
+def testPerform(mmodel_disc:Lstm_model_disc, model: Sequential, testX, testY, scalerY):
+    predictY = model.predict(testX)
+
+    predictY = predictY.reshape(predictY.shape[0],1)
+    print('predictY before inverse', predictY.shape)
+    if scalerY is not None:
+        predictY = scalerY.inverse_transform(predictY)
+
+    testY = testY.reshape(predictY.shape[0],1)
+    print('testY before inverse', testY.shape)
+    if scalerY is not None:
+        testY = scalerY.inverse_transform(testY)
+    #testY = numpy.transpose(testY)
+
+    print('predicty, testY', predictY.shape, testY.shape)
+    testScore = math.sqrt(mean_absolute_error(testY, predictY))
+    print(mmodel_disc.model_name,'Test Score: %.3f MAE' % (testScore))
+
+    testScore = math.sqrt(mean_squared_error(testY, predictY))
+    print(mmodel_disc.model_name,'Test Score: %.3f RMSE' % (testScore))
+
+    plt.clf()
+    plt.plot(testY)
+    plt.plot(predictY)
+    plt.savefig(RESULTPATH + mmodel_disc.site +'imf_CEEMD'+ str(mmodel_disc.imfs_idx) +'.png')
+    #plt.show()
+    return testY, predictY
+
+def load_24_ma_maRes_models_and_run(first_ma_model_disc: Moving_ave_model_disc, first_ma_res_model:Ma_res_model_disc):
 
     predict_start, predict_end = 1, 25
+    predictY = []
 
-    
-    preditcts = {}
-  
+    model_24_predicts = []
+
+    ground_truth = None
     for predict_hour in range(predict_start, predict_end):
-        predict = []    
-        test_features = dataX_24_hours[predict_hour - 1]    
-        print('processing model ', predict_hour)        
-        model_disc = Lstm_model_disc(predict_hour, window, dataset_len, epcoh,dropout, site)
-        # split into train and test sets
-        # print('testX_0',testX_0)
-        predict = run_saved_model(model_disc,test_features)
-        preditcts[predict_hour] = predict
+        print('processing model', predict_hour)        
+        # validation_start = first_ma_model_disc.dataset_len
+        # validation_end = -1
+        #validation_split = 0
+        validation_start = TRAIN_TEST_SIZE
+        validation_end = -1
+        validation_split = 0
+
+        ma_model_disc = first_ma_model_disc
+        ma_model_disc.set_predict_hour(predict_hour)
+
+        ma_res_model_disc = first_ma_res_model
+        ma_res_model_disc.set_predict_hour(predict_hour)
+
+        trainX, trainY, trainY_residual, validationX, validationY, validationY_residual, scalerY = prepare_ma_data(ma_model_disc,validation_start,validation_end, validation_split)
+
+        if predict_hour == 1:
+            ground_truth = validationY + validationY_residual
+            ground_truth = scalerY.inverse_transform([ground_truth])
+            ground_truth = numpy.transpose(ground_truth)
+
+        window = first_ma_model_disc.window
+        model_predict = [[0]] * (predict_hour - 1)
+        
+        # ma_pred = run_saved_model(ma_model_disc, validationX)
+        # ma_res_pred = run_saved_model(ma_res_model_disc, validationX)
+
+        m1 = keras.models.load_model(MODEL_PATH + ma_model_disc.site + ma_model_disc.model_name + '.h5')
+        m2 = keras.models.load_model(MODEL_PATH + ma_res_model_disc.site + ma_res_model_disc.model_name + '.h5')
+        ma_truth, ma_pred = testPerform(ma_model_disc, m1,validationX,validationY,scalerY)
+        ma_res_truth, ma_res_pred = testPerform(ma_res_model_disc, m2,validationX,validationY_residual,scalerY)
+
+        test_ma_maRes_combined(ma_truth, ma_pred, ma_res_truth, ma_res_pred)
 
 
-    datetimeData = read_csv(nwp_val_csv, usecols = ['data-time'], engine='python')
-    datetimes = datetimeData.values[:]
+        ma_maRes_pred = ma_pred + ma_res_pred
+        model_predict.extend(ma_maRes_pred)
+        model_24_predicts.append(model_predict)
+    
+    hour = 1
+    for i in range(len(model_24_predicts[0])):
+
+        #predict = model_predicts[hour-1][i]
+        predict = model_24_predicts[hour-1][i]
+        predictY.append(predict)
+        hour += 1
+        if hour >= 25:
+            hour = 1
+
+
+    finalscore = math.sqrt(mean_squared_error(predictY, ground_truth))
+    print('Test Score: %.3f RMSE' % (finalscore))
+
+    plt.clf()
+    plt.plot(ground_truth)
+    plt.plot(predictY)
+    plt.show()
     
     
-    predicts_in_series = [['time','wind']]
-    for day in range(len(preditcts[1])):
-        for hour in range(1,25):
-            day_time = datetimes[ (2*day + 1) * window + hour - 1][0]
-            predicts_in_series.append([day_time,preditcts[hour][day][0]])
+    return  numpy.array(predictY), ground_truth
+
+def train_24_ma_maRes_models(site, window, epcoh, dropout, ma_window, dataset_len, forceTrain):
+    if forceTrain:
+
+        first_model = None
+
+        for predict_hour in range(1,25):        
+            dataset_len = TRAIN_TEST_SIZE
+            ma_model_disc = Moving_ave_model_disc(predict_hour, window, dataset_len, epcoh, dropout, site, ma_window)
+            ma_res_model_disc = Ma_res_model_disc(predict_hour, window, dataset_len, epcoh, dropout, site, ma_window)
+            if predict_hour == 24:
+                first_ma_model = ma_model_disc
+                first_ma_res_model =ma_res_model_disc
+            
+            ma_model(ma_model_disc)
+            ma_res_model(ma_res_model_disc)
     
-    with open(RESULTPATH + site + 'predict_val.csv', 'w') as csvFile:
-        writer = csv.writer(csvFile)
-        writer.writerows(predicts_in_series)
+        return first_ma_model, first_ma_res_model , True
+    
+    else:
+        try:
+            ma_model_disc = Moving_ave_model_disc(1, window, dataset_len, epcoh, dropout, site, ma_window)
+            ma_res_model_disc = Ma_res_model_disc(1, window, dataset_len, epcoh, dropout, site, ma_window)
+            #return first_model
+            
+            keras.models.load_model(MODEL_PATH + ma_model_disc.site + ma_model_disc.model_name + '.h5')
+            keras.models.load_model(MODEL_PATH + ma_res_model_disc.site + ma_res_model_disc.model_name + '.h5')
+
+            return ma_model_disc, ma_res_model_disc, False
+            
+        except:
+
+            first_model = None
+
+            for predict_hour in range(1,25):        
+                dataset_len = TRAIN_TEST_SIZE
+                ma_model_disc = Moving_ave_model_disc(predict_hour, window, dataset_len, epcoh, dropout, site, ma_window)
+                ma_res_model_disc = Ma_res_model_disc(predict_hour, window, dataset_len, epcoh, dropout, site, ma_window)
+                if predict_hour == 1:
+                    first_ma_model = ma_model_disc
+                    first_ma_res_model =ma_res_model_disc
+                
+                ma_model(ma_model_disc)
+                ma_res_model(ma_res_model_disc)
+        
+            return first_ma_model, first_ma_res_model , True
+
+
+def ma_res_model(ma_res_model_disc:Ma_res_model_disc):
+    train_test_size = ma_res_model_disc.dataset_len
+    train_test_split = ma_res_model_disc.train_test_split
+    trainX, trainY, trainY_residual,testX, testY,testY_residual, scalerY = prepare_ma_data(ma_res_model_disc, 0, train_test_size, train_test_split)
+
+    model = train_ma_res_model(ma_res_model_disc, trainX, trainY_residual)
+
+    testY, predictY =testPerform(ma_res_model_disc, model, testX, testY_residual, scalerY)
+    return testY, predictY
+
+def ma_model(ma_model_disc:Moving_ave_model_disc):
+    
+    train_test_size = ma_model_disc.dataset_len
+    train_test_split = ma_model_disc.train_test_split
+    trainX, trainY, trainY_residual,testX, testY,testY_residual, scalerY = prepare_ma_data(ma_model_disc, 0, train_test_size, train_test_split)
+
+    model = train_ma_model(ma_model_disc, trainX, trainY)
+
+    testY, predictY = testPerform(ma_model_disc, model, testX, testY, scalerY)
+    return testY, predictY
+
+
+def test_ma_maRes_combined(ma_testY, ma_predY, ma_res_testY,  ma_res_predY):
+    wind_obs = ma_testY + ma_res_testY
+    wind_pred = ma_predY + ma_res_predY
+
+    testScore = math.sqrt(mean_absolute_error(wind_obs, wind_pred))
+    print('Test Score: %.3f MAE' % (testScore))
+
+    testScore = math.sqrt(mean_squared_error(wind_obs, wind_pred))
+    print('Test Score: %.3f RMSE' % (testScore))
+
+    plt.clf()
+    plt.plot(wind_obs)
+    plt.plot(wind_pred)
+    plt.show()
+
+
+
+def create_seq2seq_dataset(dataset, nwp_start, window, look_forward_window = 24, Ycolumn_idx = 0, obs_end = 6, nwp_end = 7):
+    dataX, dataY = [], []
+    i = window
+    while i < len(dataset)- look_forward_window + 1:
+        predict_start_hour = i
+        predict_end_hour = predict_start_hour + look_forward_window
+        wind_24_hour = []
+        
+        for hour in range(predict_start_hour, predict_end_hour):
+            wind = dataset[hour, Ycolumn_idx]
+            wind_24_hour.append(wind)
+
+        dataY.append(wind_24_hour)
+        
+        nwp_predict = dataset[predict_end_hour - window: predict_end_hour, nwp_start: nwp_end]
+        X = dataset[(i-window):(i), [0,2,3]]
+        
+        obs_nwp_featue_list = []
+        
+        row = 0 
+        while row < window:
+            X_part = X[row]
+            nwp_part = nwp_predict[row]
+            total_row = numpy.append(X_part, nwp_part)
+            obs_nwp_featue_list.append(total_row)
+            row += 1
+
+        obs_nwp_featue = numpy.array(obs_nwp_featue_list)
+        dataX.append(obs_nwp_featue)
+
+        i += 1
+
+    dataX = numpy.array(dataX)
+    dataY = numpy.array(dataY)
+    print('dataX, dataY', dataX.shape, dataY.shape)
+    return numpy.array(dataX), numpy.array(dataY)
+
+def prepare_seq2seq_data(model_disc:Lstm_model_disc, datastart, dataend, train_test_split):
+    dataset, wind_obs = read_dataframe(model_disc.wind_tprh_nwp_file, datastart, dataend, 'wind')
+    scaler, scalerY = MinMaxScaler(feature_range=(0, 1)), MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+    wind_obs= scalerY.fit_transform(wind_obs)
+
+  
+    train_size = int(len(dataset) * train_test_split)
+    train, test = dataset[0:train_size,:], dataset[train_size:len(dataset),:]
+    
+    window = model_disc.window
+    trainX, trainY = create_seq2seq_dataset(train, NWP_START_INDEX, window, model_disc.look_forward)
+    testX, testY = create_seq2seq_dataset(test, NWP_START_INDEX, window, model_disc.look_forward)
+    
+    return  trainX, trainY, testX, testY, scalerY
+    
+
+def prepare_seq2seq2_val_data(model_disc:Lstm_model_disc, datastart, dataend):
+    dataset, wind_obs = read_dataframe(model_disc.wind_tprh_nwp_file, datastart, dataend, 'wind')
+    scaler= MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+    dataset = dataset[datastart:dataend]
+    pass
+
+def train_seq2seq_model(model_disc:Lstm_model_disc, trainX, trainY):
+
+    n_timesteps, n_features, n_outputs = trainX.shape[1], trainX.shape[2], trainY.shape[1]
+	# reshape output into [samples, timesteps, features]
+    trainY = trainY.reshape((trainY.shape[0], trainY.shape[1], 1))
+	# define model
+    model = Sequential()
+    model.add(LSTM(200, activation='relu', input_shape=(n_timesteps, n_features)))
+    model.add(RepeatVector(n_outputs))
+    model.add(LSTM(200, activation='relu', return_sequences=True))
+    model.add(TimeDistributed(Dense(100, activation='relu')))
+    model.add(TimeDistributed(Dense(1)))
+    model.compile(loss='mse', optimizer='adam')
+    model.fit(trainX, trainY, epochs= model_disc.epcoh , batch_size = 128, verbose= 1)
+    return model
+
+def prepare_val_seq2seq_data(window, look_forward, testX):
+    continue_testX = []
+    size = testX.shape[0]
+
+    i = 0 
+    while i + window + look_forward < size:
+        X = testX[i]
+        continue_testX.append(X)
+
+        i += look_forward
+
+
+    start_idx = window
+    end_idx = start_idx + look_forward * len(continue_testX)
+    return numpy.array(continue_testX), start_idx, end_idx
+
+def val_seq2seq(model_disc, model, validationX, validationY, scalerY):
+
+    validationX, start, end  = prepare_val_seq2seq_data(model_disc.window, model_disc.look_forward, validationX)
+    validationY, start, end = prepare_val_seq2seq_data(model_disc.window, model_disc.look_forward, validationY)
+
+    predictY = model.predict(validationX)
+
+    predictY = predictY.flatten()
+    validationY = validationY.flatten()
+
+    predictY = predictY.reshape((len(predictY),1))
+    validationY = validationY.reshape((len(validationY),1))
+
+    predictY = scalerY.inverse_transform(predictY)
+    validationY = scalerY.inverse_transform(validationY)
+
+    finalscore = math.sqrt(mean_squared_error(predictY, validationY))
+    print('Test Score: %.3f RMSE' % (finalscore))
+
+    plt.clf()
+    plt.plot(validationY)
+    plt.plot(predictY)
+    plt.show()
+
+    pass
+
+def seq2seqModel(model_disc:Lstm_model_disc):
+    trainX, trainY, testX, testY, scalerY = prepare_seq2seq_data(model_disc, 0, TRAIN_TEST_SIZE, 0.67)
+    model = train_seq2seq_model(model_disc, trainX, trainY)
+
+    dummy, dummy, validationX, validationY, dummy = prepare_seq2seq_data(model_disc, TRAIN_TEST_SIZE, -1, 0)
+    val_seq2seq(model_disc, model, validationX, validationY, scalerY)
+    pass
+
+def train_test_validation(model_disc: Lstm_model_disc, Ycolumn = 'wind'):
+    dataset, datasetY = read_dataframe(model_disc.wind_tprh_nwp_file, 0, 'end')
+    
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+    scalerY =  MinMaxScaler(feature_range=(0, 1))
+    datasetY = scalerY.fit_transform(datasetY)
+
+    test_start = int(model_disc.dataset_len * model_disc.train_test_split)
+    validation_start = model_disc.dataset_len
+
+    data_train, data_test, data_val = dataset[0: test_start, :], dataset[test_start: validation_start, :], dataset[validation_start:, :]
+    dataY_train, dataY_test, dataY_val = datasetY[0: test_start], datasetY[test_start: validation_start], datasetY[validation_start:]
+
+    return data_train, dataY_train, data_test, dataY_test, data_val, dataY_val, scalerY
+
+def train_test_validation_split(dataset, test_start, validation_start):
+    data_train, data_test, data_val = dataset[0: test_start, :], dataset[test_start: validation_start, :], dataset[validation_start:, :]
+    return data_train, data_test, data_val
+
+def prepare_emd_data(first_emd_model_disc:Emd_model_disc):
+    dataset, datasetY = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end')
+    
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+
+
+    scalerY =  MinMaxScaler(feature_range=(0, 1))
+    datasetY = scalerY.fit_transform(datasetY)
+    
+    dummy, nwp = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end', ycolumn='nwp_wind')
+    
+    scalerNwp = MinMaxScaler(feature_range=(0, 1))
+    nwp = scalerNwp.fit_transform(nwp)
+
+    cal_correlation(datasetY[:,0], nwp[ : ,0])
+    
+    # imfs_res = emd_detrend(datasetY)
+    # nwp_imfs = emd_detrend(nwp)
+    
+    imfs_res = vmd_detrend(datasetY)
+    nwp_imfs = vmd_detrend(nwp)
+
+
+    # for i in range(imfs_res.shape[1]):
+    #     imf = imfs_res[:, i]
+    #     #print('imf', imf.shape)
+    #     #
+    #     for j in range(nwp_imfs.shape[1]):
+    #         nwp_imf = nwp_imfs[:, j]
+    #         print('%.3f'  % cal_correlation( imf, nwp_imf) , end = ' ')
+        
+    #     print('%.3f'  % cal_correlation(imf, nwp.T) , end = ' ')
+    #     print(' ')
+
+
+    # sys.exit()
+    test_start = int(first_emd_model_disc.dataset_len * first_emd_model_disc.train_test_split)
+    validation_start = first_emd_model_disc.dataset_len
+
+    # print('teststart, validationstart', test_start, validation_start)
+    # sys.exit()
+
+    dataset_tr, dataset_te, dataset_val = train_test_validation_split(dataset, test_start, validation_start)
+
+    imfs_tr, imfs_te, imfs_val = train_test_validation_split(imfs_res, test_start, validation_start)
+    nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val = train_test_validation_split(nwp_imfs, test_start, validation_start)
+
+    return dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp
+
+
+def load_model(model_disc):
+
+    try: 
+        model = keras.models.load_model(MODEL_PATH + model_disc.site + model_disc.model_name + '.h5')
+    except:
+        print('loading' + model_disc.model_name + 'failed')
+        model = None    
+
+    return model
+
+def train_emd_model(model_disc, trainX, trainY, forceTraind = False):
+
+    # create and fit the LSTM network
+    if not forceTraind:
+        model = load_model(model_disc)
+        if model is not None:
+            return model
+        
+
+    epoch = model_disc.epcoh
+    numpy.random.seed(7)
+    print('training on', model_disc.model_name)
+    #sys.exit()
+    model = Sequential()
+    model.add(CuDNNLSTM(200, input_shape=(trainX.shape[1], trainX.shape[2])))
+    model.add(Dense(int(100)))
+    #model.add(Dense(int(50)))
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    #print('trainX, trainY', trainX[0:10], trainY[0:10])
+    #sys.exit()
+    model.fit(trainX, trainY, epochs= epoch, batch_size= 128, verbose=1)
+    model.save(MODEL_PATH + model_disc.site + model_disc.model_name  +'.h5')
+    return model
+
+def random_float(low, high):
+    return random.random()*(high-low) + low
+
+
+def append_component(dataset, components, component_id):
+    print('dataset', dataset.shape)
+    component = components[:, component_id]
+    component = component.reshape((component.shape[0],1))
+    re = numpy.append(dataset, component, axis=1)
+
+    print('re',re.shape)
+    return re
+def train_merge_models(trainX, trainY):
+
+    model = Sequential()
+    model.add(Dense(200, input_dim=trainX.shape[1], activation='relu'))
+    model.add(Dense(100, activation='relu'))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    model.fit(trainX, trainY, epochs= 200, batch_size= 128, verbose=1)
+    
+    return model
+    
+
+
+def emdModels(first_emd_model_disc:Emd_model_disc):
+    dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp = prepare_emd_data(first_emd_model_disc)
+
+
+
+    sum_testY = None
+    dpl_te = None
+
+    pred_tr_results = None
+    pred_val_results = None
+    for imfs_id in range(imfs_tr.shape[1]):
+        model_disc = first_emd_model_disc
+        model_disc.set_immfs_idx(imfs_id)
+
+        dateset_tr_app_comp = append_component(dataset_tr, imfs_tr, imfs_id)
+        dateset_tr_app_comp = append_component(dateset_tr_app_comp, nwp_imfs_tr, imfs_id)
+        trainX, trainY, dummy = create_multifeature_nwp_dataset(dateset_tr_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_tr_app_comp.shape[1] -2 )
+        print('trainX shape, trainY shape', trainX.shape, trainY.shape)
+        model = train_emd_model(model_disc, trainX, trainY, forceTraind=False)
+
+        dummy, pred_tr = testPerform(model_disc, model, trainX, trainY, scalerY = None)
+        print('pred_tr', pred_tr.shape)
+
+        if imfs_id == 0:
+            pred_tr_results =pred_tr
+        else:
+            pred_tr_results = numpy.append(pred_tr_results, pred_tr, axis=1)
+            print('pred_tr_results', pred_tr_results.shape)
+
+            
+
+        dateset_val_app_comp = append_component(dataset_val, imfs_val, imfs_id)
+        dateset_val_app_comp = append_component(dateset_val_app_comp, nwp_imfs_val, imfs_id)
+        testX, testY, dummy = create_multifeature_nwp_dataset(dateset_val_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_val_app_comp.shape[1] -2 )
+        obs_val, pred_val = testPerform(model_disc, model, testX, testY, scalerY = None)
+
+
+        if imfs_id == 0:
+            pred_val_results =pred_val
+        else:
+            pred_val_results = numpy.append(pred_val_results, pred_val, axis=1)
+            print('pred_val_results', pred_val_results.shape)
+
+
+        if imfs_id == 0:
+            dpl_val = pred_val
+        else:
+            dpl_val = dpl_val + pred_val
+
+    for i in range(len(dpl_val)):
+        if dpl_val[i] < 0:
+            dpl_val[i] = random_float(2,3)
+
+
+    dummy, obs_tr, nwp_tr = create_multifeature_nwp_dataset(dataset_tr, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
+    print('pred_tr_resutls, obs_tr', pred_tr_results.shape, obs_tr.shape)   
+    merge_model =  train_merge_models(pred_tr_results, obs_tr)
+
+
+    dummy, obs_val, nwp_val = create_multifeature_nwp_dataset(dataset_val, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
+    obs_val, merge_pred_val = testPerform(first_emd_model_disc, merge_model, pred_val_results, obs_val, scalerY)
+    
+    nwp_val = scalerNwp.inverse_transform([nwp_val])
+    nwp_val = numpy.transpose(nwp_val)
+
+
+    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = compare_nwp_dpl(obs_val, nwp_val, merge_pred_val)
+
+    # plotlines([obs_val, merge_pred_val, nwp_val], ['obs', 'deeplearning', 'nwp'], xlabel = 'time', ylabel = 'wind', savepath= RESULTPATH + first_emd_model_disc.site + first_emd_model_disc.model_name + '.png', show = True)
+
+
+    return score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up
+
+    # compare_nwp_dpl(obs_val, nwp_val, dpl_val)
+
+    # plotlines([obs_val, dpl_val, nwp_val], ['obs', 'deeplearning', 'nwp'], xlabel = 'time', ylabel = 'wind', savepath= RESULTPATH + first_emd_model_disc.site + first_emd_model_disc.model_name + '.png', show = True)
+
+    pass
+
+
 
 if __name__ == '__main__':
+
+    
     #lstm(DATAPATH + WIND_CSV, DATAPATH + NWP_CSV, window, predict_hour)
 
     pass
