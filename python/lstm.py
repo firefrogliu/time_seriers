@@ -200,12 +200,11 @@ class Merge_model_disc(Lstm_model_disc):
         self.__update_name()
         print('name is', self.model_name)
 
-    def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, site, train_test_split = 0.67):
+    def __init__(self, predict_hour, window, dataset_len, epcoh,  site, train_test_split = 0.67):
         self.predict_hour = predict_hour
         self.window = window
         self.dataset_len = dataset_len
         self.epcoh = epcoh
-        self.dropout = dropout
         self.site = site
         self.train_test_split = train_test_split
         self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
@@ -1238,21 +1237,7 @@ def seq2seqModel(model_disc:Lstm_model_disc):
     val_seq2seq(model_disc, model, validationX, validationY, scalerY)
     pass
 
-def train_test_validation(model_disc: Lstm_model_disc, Ycolumn = 'wind'):
-    dataset, datasetY = read_dataframe(model_disc.wind_tprh_nwp_file, 0, 'end')
-    
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    dataset = scaler.fit_transform(dataset)
-    scalerY =  MinMaxScaler(feature_range=(0, 1))
-    datasetY = scalerY.fit_transform(datasetY)
 
-    test_start = int(model_disc.dataset_len * model_disc.train_test_split)
-    validation_start = model_disc.dataset_len
-
-    data_train, data_test, data_val = dataset[0: test_start, :], dataset[test_start: validation_start, :], dataset[validation_start:, :]
-    dataY_train, dataY_test, dataY_val = datasetY[0: test_start], datasetY[test_start: validation_start], datasetY[validation_start:]
-
-    return data_train, dataY_train, data_test, dataY_test, data_val, dataY_val, scalerY
 
 def train_test_validation_split(dataset, test_start, validation_start):
     data_train, data_test, data_val = dataset[0: test_start, :], dataset[test_start: validation_start, :], dataset[validation_start:, :]
@@ -1261,9 +1246,11 @@ def train_test_validation_split(dataset, test_start, validation_start):
 def prepare_emd_data(first_emd_model_disc:Emd_model_disc):
     dataset, datasetY = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end')
     scaler = MinMaxScaler(feature_range=(0, 1))
+    
     dataset = scaler.fit_transform(dataset)
     scalerY =  MinMaxScaler(feature_range=(0, 1))
     datasetY = scalerY.fit_transform(datasetY)
+    
     dummy, nwp = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end', ycolumn='nwp_wind')
     scalerNwp = MinMaxScaler(feature_range=(0, 1))
     nwp = scalerNwp.fit_transform(nwp)
@@ -1279,11 +1266,6 @@ def prepare_emd_data(first_emd_model_disc:Emd_model_disc):
 
     print(imfs_res[:10], imfs_res[2].sum())
     print(nwp_imfs[:10], nwp_imfs[2].sum())
-
-
-    
-
-
 
     test_start = int(first_emd_model_disc.dataset_len * first_emd_model_disc.train_test_split)
     validation_start = first_emd_model_disc.dataset_len
@@ -1388,21 +1370,17 @@ def comb_24_emd_models(first_emd_model_disc:Emd_model_disc):
         print(emd_model.model_name)
 
         merge_pred_val = load_np_array(emd_model, 'merge_pred_val')
-        print('merge_pred_val shape', merge_pred_val.shape)
         merge_pred_val = numpy.insert(merge_pred_val, 0, [0] * (predict_hour - 1))
-        print('merge_pred_val shape', merge_pred_val.shape)
         
         merge_24_pred_val.append(merge_pred_val)
         if predict_hour == 1:
-            nwp_val = load_np_array(first_emd_model_disc, 'nwp_val')
-            obs_val = load_np_array(first_emd_model_disc, 'obs_val')   
+            nwp_val = load_np_array(emd_model, 'nwp_val')
+            obs_val = load_np_array(emd_model, 'obs_val')   
     
     merge_24_pred_val = np.array(merge_24_pred_val)
-    print('merge_24_pred_val shape',merge_24_pred_val.shape)
     merge_24_pred_val = merge_24_pred_val.T
 
     final_24_val = []
-
     predict_hour = 0
     
     for idx in range(len(obs_val)):
@@ -1425,7 +1403,7 @@ def val_emd_models(first_emd_model_disc:Emd_model_disc, newlyTrained_emd = False
     obs_val = load_np_array(first_emd_model_disc, 'obs_val')
 
     if merge_pred_val is None or nwp_val is None or obs_val is None or newlyTrained_emd:
-        dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp = prepare_emd_data(first_emd_model_disc)
+        dummy, dummy, dataset_val, dummy, dummy, nwp_imfs_val, dummy, dummy, imfs_val, scalerY, scalerNwp = prepare_emd_data(first_emd_model_disc)
 
         pred_val_results = None
         for imfs_id in range(imfs_val.shape[1]):
@@ -1446,12 +1424,12 @@ def val_emd_models(first_emd_model_disc:Emd_model_disc, newlyTrained_emd = False
                 print('pred_val_results', pred_val_results.shape)
 
 
-        merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh, dropout = 0.4, site = first_emd_model_disc.site)
+        merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh,  site = first_emd_model_disc.site)
         merge_model =  load_model(merge_model_disc)
 
         dummy, obs_val, nwp_val = create_multifeature_nwp_dataset(dataset_val, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
 
-        obs_val, merge_pred_val = testPerform(merge_model, merge_model, pred_val_results, obs_val, scalerY)
+        obs_val, merge_pred_val = testPerform(merge_model_disc, merge_model, pred_val_results, obs_val, scalerY)
         
         nwp_val = scalerNwp.inverse_transform([nwp_val])
         nwp_val = numpy.transpose(nwp_val)
@@ -1480,7 +1458,7 @@ def emdModels(first_emd_model_disc:Emd_model_disc):
         trainX, trainY, dummy = create_multifeature_nwp_dataset(dateset_tr_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_tr_app_comp.shape[1] -2 )
 
         print('trainX shape, trainY shape', trainX.shape, trainY.shape)
-        model, newlyTrained = train_emd_model(model_disc, trainX, trainY, forceTraind=False)
+        model, newlyTrained = train_emd_model(model_disc, trainX, trainY, forceTraind=True)
 
         one_newlyTrained = one_newlyTrained or newlyTrained    
 
@@ -1496,7 +1474,7 @@ def emdModels(first_emd_model_disc:Emd_model_disc):
     dummy, obs_tr, dummy = create_multifeature_nwp_dataset(dataset_tr, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
     print('pred_tr_resutls, obs_tr', pred_tr_results.shape, obs_tr.shape)   
     
-    merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh, dropout = 0.4, site = first_emd_model_disc.site)
+    merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh, site = first_emd_model_disc.site)
     
     train_merge_models(merge_model_disc, pred_tr_results, obs_tr)
 

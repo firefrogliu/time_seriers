@@ -52,7 +52,6 @@ def compare_nwp_dpl(obs, nwp, dpl):
 
     return score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up
 
-    pass
 
 def cal_correlation(a,b):    
     coffs = np.corrcoef(a, b)

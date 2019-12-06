@@ -241,10 +241,10 @@ def testEmdModel(site, note):
     forceTrain = False
 
     imfs_id = 4
-    # model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
-    # comb_24_emd_models(model_disc)
+    model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+    comb_24_emd_models(model_disc)
     
-    # sys.exit()
+    sys.exit()
 
     for predict_hour in range(24,25):
         results = []
@@ -279,15 +279,16 @@ def testEmdModel(site, note):
 
 if __name__ == '__main__':
 
-    site_idx = int(sys.argv[1])
-    note = sys.argv[2]
+    # site_idx = int(sys.argv[1])
+    # note = sys.argv[2]
 
+    site_idx = 0
+    note = 'vmd'
+    
     sites = ['site0/', 'site1/','site2/', 'site3/','site4/', 'site5/','site6/', 'site7/','site8/']
     
     #site_idx = int(sys.argv[1])
 
-    site_idx = int(sys.argv[1]) 
-    note = sys.argv[2]
     site = str(sites[site_idx])
 
     testEmdModel(site, note)
