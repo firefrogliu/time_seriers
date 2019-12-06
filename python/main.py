@@ -235,16 +235,37 @@ def testEmdModel(site, note):
     epcoh = 50
     window = 24     
     
-    predict_hour = 24
+    predict_hour = 1
     dropout = 0.4
     train_test_split = 0.99
     forceTrain = False
 
-    imfs_id = 0
+    imfs_id = 4
+    # model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+    # comb_24_emd_models(model_disc)
     
-    model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
-    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = emdModels(model_disc)
+    # sys.exit()
 
+    for predict_hour in range(24,25):
+        results = []
+        model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+        
+        one_newlyTrained = False
+        one_newlyTrained = emdModels(model_disc)
+        
+        score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = val_emd_models(model_disc, one_newlyTrained)
+
+        print(score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up)
+        if predict_hour == 1:
+            results = [[model_disc.model_name, note]]
+            results.append(['site','predict_hour','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])
+            results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
+        else:
+            results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
+        with open(RESULTPATH + 'vmd_results_24hour.csv', 'a') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(results)
+    sys.exit()
     if site == 'site0':
         results= [[model_disc.model_name, note]]
         results.append(['site','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])

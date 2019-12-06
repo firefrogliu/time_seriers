@@ -1,5 +1,6 @@
 import numpy as np
 from PyEMD import EMD, Visualisation, EEMD, CEEMDAN
+from constants import VMD_MODES
 
 def moving_average(a, t=3) :
     ma = np.cumsum(a, dtype=float)
@@ -104,7 +105,7 @@ def vmd_detrend(f):
     #. some sample parameters for VMD  
     alpha = 2000       # moderate bandwidth constraint  
     tau = 0.            # noise-tolerance (no strict fidelity enforcement)  
-    K = 5              # 3 modes  
+    K = VMD_MODES      # 3 modes  
     DC = 0             # no DC part imposed  
     init = 1           # initialize omegas uniformly  
     tol = 1e-7  

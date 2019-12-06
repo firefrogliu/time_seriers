@@ -65,5 +65,9 @@ if __name__ == '__main__':
     a = [1,2,4,8,10]
     b = [9, 12, 3, 8, 11]
 
+    a = np.array(a)
+    print(a)
+    a = np.insert(a, 0, [0] * 5)
+    print(a)
 
-    plotlines([a,b], ['a','b'], xlabel = 'time', ylabel = 'wind', savepath= None, show = True)
+    #plotlines([a,b], ['a','b'], xlabel = 'time', ylabel = 'wind', savepath= None, show = True)

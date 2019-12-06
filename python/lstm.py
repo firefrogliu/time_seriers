@@ -1,5 +1,5 @@
-from constants import *
 import pandas
+from constants import *
 import matplotlib.pyplot as plt
 import csv
 # LSTM for international airline passengers problem with regression framing
@@ -23,7 +23,7 @@ from clean_val_data import get_val_testX
 from detrend import moving_average, emd_detrend, ceemd_detrend, vmd_detrend
 import pickle
 import random
-
+import copy
 
 from garget import *
 from keras import backend as K
@@ -160,7 +160,7 @@ class Seq2seq_model_disc(Lstm_model_disc):
 
 class Emd_model_disc(Lstm_model_disc):
 
-    imfs_idx = 0
+    imfs_idx = 4
 
     def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, imfs_idx, site, train_test_split = 0.67):
         self.predict_hour = predict_hour
@@ -172,7 +172,7 @@ class Emd_model_disc(Lstm_model_disc):
         self.imfs_idx = imfs_idx
         self.train_test_split = train_test_split
         self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
-        self.model_name = 'emd_'+ str(self.imfs_idx) + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'train_len' + str(self.dataset_len * self.train_test_split) + 'eph' + str(self.epcoh)
+        self.__update_name()
         print('model name', self.model_name)
 
     def set_immfs_idx(self,imfs_idx):
@@ -181,10 +181,39 @@ class Emd_model_disc(Lstm_model_disc):
         self.__update_name()
         print('name is', self.model_name)
 
+    def set_predict_hour(self, predict_hour):
+        self.predict_hour = predict_hour
+        print('updateing name')    
+        self.__update_name()
+        print('name is', self.model_name)
+
 
     def __update_name(self):
         self.model_name = 'emd_'+ str(self.imfs_idx) + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'datalen' + str(self.dataset_len) + 'eph' + str(self.epcoh)
 
+class Merge_model_disc(Lstm_model_disc):
+    
+
+    def set_predict_hour(self, predict_hour):
+        self.predict_hour = predict_hour
+        print('updateing name')    
+        self.__update_name()
+        print('name is', self.model_name)
+
+    def __init__(self, predict_hour, window, dataset_len, epcoh, dropout, site, train_test_split = 0.67):
+        self.predict_hour = predict_hour
+        self.window = window
+        self.dataset_len = dataset_len
+        self.epcoh = epcoh
+        self.dropout = dropout
+        self.site = site
+        self.train_test_split = train_test_split
+        self.wind_tprh_nwp_file = DATAPATH + site + UPDATA_OBS_NWP_ALLYEAR_CSV
+        self.__update_name()
+        print('model name', self.model_name)
+
+    def __update_name(self):
+        self.model_name = 'merge_emd_' + 'pre' + str(self.predict_hour) + 'window' + str(self.window) + 'train_len' + str(int(self.dataset_len * self.train_test_split)) + 'eph' + str(self.epcoh)
         
 
 # convert an array of values into a dataset matrix
@@ -924,8 +953,6 @@ def testPerform(mmodel_disc:Lstm_model_disc, model: Sequential, testX, testY, sc
     plt.clf()
     plt.plot(testY)
     plt.plot(predictY)
-    plt.savefig(RESULTPATH + mmodel_disc.site +'imf_CEEMD'+ str(mmodel_disc.imfs_idx) +'.png')
-    #plt.show()
     return testY, predictY
 
 def load_24_ma_maRes_models_and_run(first_ma_model_disc: Moving_ave_model_disc, first_ma_res_model:Ma_res_model_disc):
@@ -1233,51 +1260,39 @@ def train_test_validation_split(dataset, test_start, validation_start):
 
 def prepare_emd_data(first_emd_model_disc:Emd_model_disc):
     dataset, datasetY = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end')
-    
     scaler = MinMaxScaler(feature_range=(0, 1))
     dataset = scaler.fit_transform(dataset)
-
-
     scalerY =  MinMaxScaler(feature_range=(0, 1))
     datasetY = scalerY.fit_transform(datasetY)
-    
     dummy, nwp = read_dataframe(first_emd_model_disc.wind_tprh_nwp_file, 0, 'end', ycolumn='nwp_wind')
-    
     scalerNwp = MinMaxScaler(feature_range=(0, 1))
     nwp = scalerNwp.fit_transform(nwp)
-
     cal_correlation(datasetY[:,0], nwp[ : ,0])
-    
     # imfs_res = emd_detrend(datasetY)
     # nwp_imfs = emd_detrend(nwp)
-    
+
+    print(datasetY[0:10])
+    print(nwp[0:10])
+    # sys.exit()
     imfs_res = vmd_detrend(datasetY)
     nwp_imfs = vmd_detrend(nwp)
 
-
-    # for i in range(imfs_res.shape[1]):
-    #     imf = imfs_res[:, i]
-    #     #print('imf', imf.shape)
-    #     #
-    #     for j in range(nwp_imfs.shape[1]):
-    #         nwp_imf = nwp_imfs[:, j]
-    #         print('%.3f'  % cal_correlation( imf, nwp_imf) , end = ' ')
-        
-    #     print('%.3f'  % cal_correlation(imf, nwp.T) , end = ' ')
-    #     print(' ')
+    print(imfs_res[:10], imfs_res[2].sum())
+    print(nwp_imfs[:10], nwp_imfs[2].sum())
 
 
-    # sys.exit()
+    
+
+
+
     test_start = int(first_emd_model_disc.dataset_len * first_emd_model_disc.train_test_split)
     validation_start = first_emd_model_disc.dataset_len
-
-    # print('teststart, validationstart', test_start, validation_start)
-    # sys.exit()
 
     dataset_tr, dataset_te, dataset_val = train_test_validation_split(dataset, test_start, validation_start)
 
     imfs_tr, imfs_te, imfs_val = train_test_validation_split(imfs_res, test_start, validation_start)
     nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val = train_test_validation_split(nwp_imfs, test_start, validation_start)
+
 
     return dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp
 
@@ -1287,18 +1302,18 @@ def load_model(model_disc):
     try: 
         model = keras.models.load_model(MODEL_PATH + model_disc.site + model_disc.model_name + '.h5')
     except:
-        print('loading' + model_disc.model_name + 'failed')
+        print('loading ' + model_disc.model_name + 'failed')
         model = None    
 
     return model
 
 def train_emd_model(model_disc, trainX, trainY, forceTraind = False):
-
+    newlyTrained = False
     # create and fit the LSTM network
     if not forceTraind:
         model = load_model(model_disc)
         if model is not None:
-            return model
+            return model, newlyTrained
         
 
     epoch = model_disc.epcoh
@@ -1315,7 +1330,8 @@ def train_emd_model(model_disc, trainX, trainY, forceTraind = False):
     #sys.exit()
     model.fit(trainX, trainY, epochs= epoch, batch_size= 128, verbose=1)
     model.save(MODEL_PATH + model_disc.site + model_disc.model_name  +'.h5')
-    return model
+    newlyTrained = True
+    return model, newlyTrained
 
 def random_float(low, high):
     return random.random()*(high-low) + low
@@ -1329,38 +1345,144 @@ def append_component(dataset, components, component_id):
 
     print('re',re.shape)
     return re
-def train_merge_models(trainX, trainY):
+def train_merge_models(merge_model_disc, trainX, trainY, forceTrain = False):
+    if not forceTrain:
+        print('loading merge model')
+        model = load_model(merge_model_disc)
 
+        if model is not None:
+            print('loading merge model succeed')
+            return model
+    
+    print('loading merge model failed')
     model = Sequential()
     model.add(Dense(200, input_dim=trainX.shape[1], activation='relu'))
     model.add(Dense(100, activation='relu'))
     model.add(Dense(1, activation='sigmoid'))
     model.compile(loss='mean_squared_error', optimizer='adam')
     model.fit(trainX, trainY, epochs= 200, batch_size= 128, verbose=1)
-    
+    model.save(MODEL_PATH + merge_model_disc.site + merge_model_disc.model_name  +'.h5')
     return model
     
+def save_np_array(model_disc, tosave, name):
+    print('saving ', RESULTPATH + model_disc.site + 'tmp/' +model_disc.model_name  +'_' + name + '.npy')
+    numpy.save(RESULTPATH + model_disc.site + 'tmp/' +model_disc.model_name  +'_' + name + '.npy', tosave) 
+
+def load_np_array(model_disc, name):
+    try:
+        re = numpy.load(RESULTPATH + model_disc.site + 'tmp/' +model_disc.model_name  +'_' + name + '.npy')
+        return re
+    except:
+        print('loading ' + RESULTPATH + model_disc.site + 'tmp/' +model_disc.model_name  +'_' + name + '.npy' + ' failed')
+        return None
+
+def comb_24_emd_models(first_emd_model_disc:Emd_model_disc):
+    obs_val = None
+    nwp_val = None
+    merge_24_pred_val = []
+    for predict_hour in range(1,25):
+
+        emd_model = copy.copy(first_emd_model_disc)
+        emd_model.set_predict_hour(predict_hour)
+
+        print(emd_model.model_name)
+
+        merge_pred_val = load_np_array(emd_model, 'merge_pred_val')
+        print('merge_pred_val shape', merge_pred_val.shape)
+        merge_pred_val = numpy.insert(merge_pred_val, 0, [0] * (predict_hour - 1))
+        print('merge_pred_val shape', merge_pred_val.shape)
+        
+        merge_24_pred_val.append(merge_pred_val)
+        if predict_hour == 1:
+            nwp_val = load_np_array(first_emd_model_disc, 'nwp_val')
+            obs_val = load_np_array(first_emd_model_disc, 'obs_val')   
+    
+    merge_24_pred_val = np.array(merge_24_pred_val)
+    print('merge_24_pred_val shape',merge_24_pred_val.shape)
+    merge_24_pred_val = merge_24_pred_val.T
+
+    final_24_val = []
+
+    predict_hour = 0
+    
+    for idx in range(len(obs_val)):
+        best_predict = merge_24_pred_val[idx, predict_hour]
+        final_24_val.append(best_predict)
+        predict_hour += 1
+        if predict_hour == 24:
+            predict_hour = 0
+
+    final_24_val = np.array(final_24_val).T
+
+    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = compare_nwp_dpl(obs_val, nwp_val, final_24_val)
+    plotlines([obs_val, final_24_val, nwp_val ], ['obs', 'dpl', 'nwp'],show = True)
+    return score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up
 
 
+def val_emd_models(first_emd_model_disc:Emd_model_disc, newlyTrained_emd = False):
+    merge_pred_val = load_np_array(first_emd_model_disc, 'merge_pred_val')
+    nwp_val = load_np_array(first_emd_model_disc, 'nwp_val')
+    obs_val = load_np_array(first_emd_model_disc, 'obs_val')
+
+    if merge_pred_val is None or nwp_val is None or obs_val is None or newlyTrained_emd:
+        dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp = prepare_emd_data(first_emd_model_disc)
+
+        pred_val_results = None
+        for imfs_id in range(imfs_val.shape[1]):
+            model_disc = copy.copy(first_emd_model_disc)
+            model_disc.set_immfs_idx(imfs_id)
+
+            emd_model = load_model(model_disc)
+
+            dateset_val_app_comp = append_component(dataset_val, imfs_val, imfs_id)
+            dateset_val_app_comp = append_component(dateset_val_app_comp, nwp_imfs_val, imfs_id)
+            testX, testY, dummy = create_multifeature_nwp_dataset(dateset_val_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_val_app_comp.shape[1] -2 )
+            dummy, pred_val = testPerform(model_disc, emd_model, testX, testY, scalerY = None)
+
+            if imfs_id == 0:
+                pred_val_results =pred_val
+            else:
+                pred_val_results = numpy.append(pred_val_results, pred_val, axis=1)
+                print('pred_val_results', pred_val_results.shape)
+
+
+        merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh, dropout = 0.4, site = first_emd_model_disc.site)
+        merge_model =  load_model(merge_model_disc)
+
+        dummy, obs_val, nwp_val = create_multifeature_nwp_dataset(dataset_val, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
+
+        obs_val, merge_pred_val = testPerform(merge_model, merge_model, pred_val_results, obs_val, scalerY)
+        
+        nwp_val = scalerNwp.inverse_transform([nwp_val])
+        nwp_val = numpy.transpose(nwp_val)
+        save_np_array(first_emd_model_disc, merge_pred_val, 'merge_pred_val')
+        save_np_array(first_emd_model_disc, nwp_val, 'nwp_val')
+        save_np_array(first_emd_model_disc, obs_val, 'obs_val')
+
+
+    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = compare_nwp_dpl(obs_val, nwp_val, merge_pred_val)
+    return score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up
+
+
+#train emdModels and essemble emd models with a dense layer
 def emdModels(first_emd_model_disc:Emd_model_disc):
     dataset_tr, dataset_te, dataset_val, nwp_imfs_tr, nwp_imfs_te, nwp_imfs_val, imfs_tr, imfs_te, imfs_val, scalerY, scalerNwp = prepare_emd_data(first_emd_model_disc)
 
-
-
-    sum_testY = None
-    dpl_te = None
-
     pred_tr_results = None
-    pred_val_results = None
+    one_newlyTrained = False
+    
     for imfs_id in range(imfs_tr.shape[1]):
-        model_disc = first_emd_model_disc
+        model_disc = copy.copy(first_emd_model_disc)
         model_disc.set_immfs_idx(imfs_id)
-
         dateset_tr_app_comp = append_component(dataset_tr, imfs_tr, imfs_id)
         dateset_tr_app_comp = append_component(dateset_tr_app_comp, nwp_imfs_tr, imfs_id)
+
         trainX, trainY, dummy = create_multifeature_nwp_dataset(dateset_tr_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_tr_app_comp.shape[1] -2 )
+
         print('trainX shape, trainY shape', trainX.shape, trainY.shape)
-        model = train_emd_model(model_disc, trainX, trainY, forceTraind=False)
+        model, newlyTrained = train_emd_model(model_disc, trainX, trainY, forceTraind=False)
+
+        one_newlyTrained = one_newlyTrained or newlyTrained    
 
         dummy, pred_tr = testPerform(model_disc, model, trainX, trainY, scalerY = None)
         print('pred_tr', pred_tr.shape)
@@ -1371,55 +1493,16 @@ def emdModels(first_emd_model_disc:Emd_model_disc):
             pred_tr_results = numpy.append(pred_tr_results, pred_tr, axis=1)
             print('pred_tr_results', pred_tr_results.shape)
 
-            
-
-        dateset_val_app_comp = append_component(dataset_val, imfs_val, imfs_id)
-        dateset_val_app_comp = append_component(dateset_val_app_comp, nwp_imfs_val, imfs_id)
-        testX, testY, dummy = create_multifeature_nwp_dataset(dateset_val_app_comp, NWP_START_INDEX, model_disc.window, model_disc.predict_hour, nwp_end=8, Ycolumn_idx=dateset_val_app_comp.shape[1] -2 )
-        obs_val, pred_val = testPerform(model_disc, model, testX, testY, scalerY = None)
-
-
-        if imfs_id == 0:
-            pred_val_results =pred_val
-        else:
-            pred_val_results = numpy.append(pred_val_results, pred_val, axis=1)
-            print('pred_val_results', pred_val_results.shape)
-
-
-        if imfs_id == 0:
-            dpl_val = pred_val
-        else:
-            dpl_val = dpl_val + pred_val
-
-    for i in range(len(dpl_val)):
-        if dpl_val[i] < 0:
-            dpl_val[i] = random_float(2,3)
-
-
-    dummy, obs_tr, nwp_tr = create_multifeature_nwp_dataset(dataset_tr, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
+    dummy, obs_tr, dummy = create_multifeature_nwp_dataset(dataset_tr, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
     print('pred_tr_resutls, obs_tr', pred_tr_results.shape, obs_tr.shape)   
-    merge_model =  train_merge_models(pred_tr_results, obs_tr)
-
-
-    dummy, obs_val, nwp_val = create_multifeature_nwp_dataset(dataset_val, NWP_START_INDEX, first_emd_model_disc.window, first_emd_model_disc.predict_hour)
-    obs_val, merge_pred_val = testPerform(first_emd_model_disc, merge_model, pred_val_results, obs_val, scalerY)
     
-    nwp_val = scalerNwp.inverse_transform([nwp_val])
-    nwp_val = numpy.transpose(nwp_val)
+    merge_model_disc = Merge_model_disc(first_emd_model_disc.predict_hour, first_emd_model_disc.window, first_emd_model_disc.dataset_len, first_emd_model_disc.epcoh, dropout = 0.4, site = first_emd_model_disc.site)
+    
+    train_merge_models(merge_model_disc, pred_tr_results, obs_tr)
 
+    return one_newlyTrained
+    
 
-    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = compare_nwp_dpl(obs_val, nwp_val, merge_pred_val)
-
-    # plotlines([obs_val, merge_pred_val, nwp_val], ['obs', 'deeplearning', 'nwp'], xlabel = 'time', ylabel = 'wind', savepath= RESULTPATH + first_emd_model_disc.site + first_emd_model_disc.model_name + '.png', show = True)
-
-
-    return score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up
-
-    # compare_nwp_dpl(obs_val, nwp_val, dpl_val)
-
-    # plotlines([obs_val, dpl_val, nwp_val], ['obs', 'deeplearning', 'nwp'], xlabel = 'time', ylabel = 'wind', savepath= RESULTPATH + first_emd_model_disc.site + first_emd_model_disc.model_name + '.png', show = True)
-
-    pass
 
 
 
