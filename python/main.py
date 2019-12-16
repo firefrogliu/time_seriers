@@ -231,66 +231,125 @@ def testClassification_fusionModel(site_idx, note):
 
     combin_two_models(small_wind_model, big_wind_model, clsfi_model)
 
-def testEmdModel(site, note):
+def testCombindeEmdModels(site):
     epcoh = 50
     window = 24     
     
-    predict_hour = 1
+    #predict_hour = 1
+    dropout = 0.4
+    train_test_split = 0.99
+
+    imfs_id = 4
+    model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up, final_24_val = comb_24_emd_models(model_disc)
+    
+    return final_24_val.reshape(final_24_val.shape[0],1)
+
+    results = []
+    if predict_hour == 0:
+        results = [[model_disc.model_name]]
+        results.append(['site','predict_hour','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])
+        results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
+    else:
+        results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
+    with open(RESULTPATH + 'vmd_results_combined.csv', 'a') as csvFile:
+        writer = csv.writer(csvFile)
+        writer.writerows(results)
+    sys.exit()
+
+def get_allsite_prediction(site_list: list):
+    sites = ['site0/', 'site1/','site2/', 'site3/','site4/', 'site5/','site6/', 'site7/','site8/']
+    site_real_name = ['01', '18L', '18R', '19', '36L', '36R', 'MID1', 'MID2', 'MID3']
+    itr = 0
+    for real_name in site_list:
+        idx = site_real_name.index(real_name)
+        site = sites[idx]
+        if itr == 0:
+            final_24_val = testCombindeEmdModels(site)
+            # print(final_24_val.shape)
+            # print(final_24_val[:10])
+            # sys.exit()
+        else:
+            final_24_val = numpy.append(final_24_val, testCombindeEmdModels(site), axis=1)
+
+        itr += 1
+    
+    file_text = []
+    
+    even_day = False
+    for i in range(final_24_val.shape[0]):        
+
+        even_day = not even_day
+        row = final_24_val[i, :]
+        row = row.tolist()
+
+        row_text = ' '.join([str(x) for x in row])
+        file_text.append(row_text)
+
+    hour = 0
+    even_day = False
+    with open('emd_fcst.dat', 'w') as the_file:
+        for row in file_text:
+            if even_day:
+                the_file.write(row + '\n')
+            hour = hour + 1
+            if hour == 24:
+                even_day = not even_day
+                hour = 0
+    pass
+
+
+
+def testEmdModel(site, predict_hour):
+    epcoh = 50
+    window = 24     
+    
+    #predict_hour = 1
     dropout = 0.4
     train_test_split = 0.99
     forceTrain = False
 
     imfs_id = 4
+
+
+    #for predict_hour in range(24,25):
     model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
-    comb_24_emd_models(model_disc)
     
-    sys.exit()
+    one_newlyTrained = False
+    one_newlyTrained = emdModels(model_disc, forceTraind = False)
+    
+    score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = val_emd_models(model_disc, one_newlyTrained)
 
-    for predict_hour in range(24,25):
-        results = []
-        model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
-        
-        one_newlyTrained = False
-        one_newlyTrained = emdModels(model_disc)
-        
-        score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = val_emd_models(model_disc, one_newlyTrained)
-
-        print(score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up)
-        if predict_hour == 1:
-            results = [[model_disc.model_name, note]]
-            results.append(['site','predict_hour','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])
-            results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
-        else:
-            results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
-        with open(RESULTPATH + 'vmd_results_24hour.csv', 'a') as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(results)
-    sys.exit()
-    if site == 'site0':
-        results= [[model_disc.model_name, note]]
-        results.append(['site','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])
+    results = []
+    print(score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up)
+    if predict_hour == 1:
+        results = [[model_disc.model_name]]
+        results.append(['site','predict_hour','score_nwp', 'score_pre', 'score_up', 'score_bw_nwp', 'score_bw_pre', 'score_bw_up'])
+        results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
     else:
-        results = []
-
-    results.append([site,score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
-    with open(RESULTPATH + 'vmd_results.csv', 'a') as csvFile:
+        results.append([site, predict_hour, score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up])
+    with open(RESULTPATH + 'vmd_results_24hour.csv', 'a') as csvFile:
         writer = csv.writer(csvFile)
         writer.writerows(results)
+    sys.exit()
+
 
 if __name__ == '__main__':
 
     # site_idx = int(sys.argv[1])
     # note = sys.argv[2]
 
-    site_idx = 0
-    note = 'vmd'
+    #site_idx = 0
+    #note = 'vmd'
     
     sites = ['site0/', 'site1/','site2/', 'site3/','site4/', 'site5/','site6/', 'site7/','site8/']
     
-    #site_idx = int(sys.argv[1])
+    site_idx = int(sys.argv[1])
+    predict_hour = int(sys.argv[2])
 
     site = str(sites[site_idx])
 
-    testEmdModel(site, note)
-
+    testEmdModel(site, predict_hour)
+    #testCombindeEmdModels(site)
+    #get_allsite_prediction(['18R','36L','MID1','18L','36R','MID2','01','19','MID3'])
 

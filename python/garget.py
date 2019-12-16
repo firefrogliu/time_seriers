@@ -2,25 +2,61 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+import matplotlib.ticker as ticker
 
-
-def plotlines(data: list, lengeds: list, xlabel: str = None, ylabel: str = None, savepath: str = None, show = False):
+def plotlines(data: list, lengeds: list, xlabel: str = None,  ylabel: str = None, xticks = None, xtick_space = 1, display_lenth = -1, savepath: str = None, show = False, figsize = (16,9)):
     plt.clf()
     line_legends = []
+    fig = plt.figure(figsize= figsize)
+    ax =  fig.add_subplot()  
     for i in range(len(data)):
-        line, = plt.plot(data[i], label = lengeds[i])
-        
+        if xticks is not None:
+            line, = ax.plot(xticks[:display_lenth], data[i][:display_lenth], label = lengeds[i])
+        else:
+            line, = ax.plot(data[i][:display_lenth], label = lengeds[i])
         line_legends.append(line)
 
     
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.legend(handles = line_legends)
+    if xtick_space != 1:
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(xtick_space))
+    #ax.xaxis.set_tick_params(rotation=45)
+    plt.tight_layout()
     if savepath is not None:
-        plt.savefig(savepath)
+        plt.savefig(savepath)    
     if show:
         plt.show()
 
+def plotlines_multifigue(data: list, lengeds: list, xlabel: str = None,  ylabel: str = None, xticks = None, xtick_space = 1, display_lenth = -1,savepath: str = None, show = False, figsize = (16,9)):
+    plt.clf()
+    fig, axs = plt.subplots(len(data), figsize= figsize)
+        
+    for i in range(len(data)):
+        line_legends = []    
+        ax = axs[i]
+        for j in range(len(data[i])):
+            if xticks is not None:
+                
+                line, = ax.plot(xticks[:display_lenth], data[i][j][:display_lenth], label = lengeds[i][j])
+            else:
+                line, = ax.plot(data[i][j], label = lengeds[i][j])
+            line_legends.append(line)
+        ax.legend(handles = line_legends)
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(xtick_space))
+
+    fig.add_subplot(111, frameon=False)
+    plt.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')    
+    plt.grid(False)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    
+    plt.tight_layout()
+    if savepath is not None:
+        plt.savefig(savepath)    
+    if show:
+        plt.show()
 
 
 
@@ -61,12 +97,23 @@ def cal_correlation(a,b):
 
 if __name__ == '__main__':
 
-    a = [1,2,4,8,10]
-    b = [9, 12, 3, 8, 11]
+    # a = [1,2,4,8,10]
+    # b = [9, 12, 3, 8, 11]
 
-    a = np.array(a)
-    print(a)
-    a = np.insert(a, 0, [0] * 5)
-    print(a)
+    # a = np.array(a)
+    # print(a)
+    # a = np.insert(a, 0, [0] * 5)
+    # print(a)
 
     #plotlines([a,b], ['a','b'], xlabel = 'time', ylabel = 'wind', savepath= None, show = True)
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+
+    x = ['a','b','c','d','e']
+    y = [0,1,2,3,4]
+    y1 = [2,5,6,6,8,]
+    z = [1.2,3.3,4,5,7]
+    z0 = [2,8,2,3,4]
+    plotlines_multifigue([[y, y1],[z,z0]], [['y', 'y1'],['z','z0']], xlabel = 'time', ylabel = 'wind', xticks=x, xtick_space=1, show = True)
