@@ -83,6 +83,26 @@ import numpy as np
 import matplotlib.pyplot as plt  
 from vmdpy import VMD  
 
+def inc_vmd(f, base_window, lookback, step_size):
+    assert(base_window > len(f))
+    assert(lookback <= base_window)
+    base_vmd = vmd_detrend(f[:base_window])
+    re = base_vmd
+    start = base_window
+    while start < len(f):
+        if start + step_size > len(f):
+            current_step = len(f) - start
+        else:
+            current_step = step_size
+        
+        f_inc = f[-lookback: start + current_step]
+        
+        vmd_inc = vmd_detrend(f_inc)
+        delta_vmd_inc = vmd_inc[-current_step]
+        re = np.append(re, delta_vmd_inc, axis= 0)
+        
+        start += step_size
+
 def vmd_detrend(f):
 #. Time Domain 0 to T  
     # T = 1000  
@@ -116,9 +136,9 @@ def vmd_detrend(f):
 
     u = np.transpose(u)
 
-    print('u', u.shape)
-    print('u_hat', u_hat.shape)
-    print('omega,', omega.shape)
+    # print('u', u.shape)
+    # print('u_hat', u_hat.shape)
+    # print('omega,', omega.shape)
 
     #plt.plot(u)
     #plt.plot(u_hat)

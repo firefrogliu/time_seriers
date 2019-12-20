@@ -43,3 +43,4 @@ UPDATA_OBS_NWP_ALLYEAR_CSV = 'obs_update_nwp_allyear.csv'
 CSV_COLUMNS = ['wind','dir','slp','t2', 'rh2', 'td2', 'nwp_wind','nwp_dir','nwp_u', 'nwp_v', 'nwp_t', 'nwp_rh', 'nwp_psfc', 'nwp_slp', 'residual']
 
 VMD_MODES = 5
+DAY_HOURS = 24

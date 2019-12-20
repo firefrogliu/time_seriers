@@ -1,5 +1,7 @@
 import logging
 from lstm import *
+
+from emd_lstm import *
 from clean_data import *
 from clean_val_data import *
 from constants import *
@@ -299,6 +301,42 @@ def get_allsite_prediction(site_list: list):
     pass
 
 
+def runEmdPerDay(site):
+    epcoh = 50
+    window = 24     
+    
+    predict_hour = 1
+    dropout = 0.4
+    train_test_split = 0.99
+    forceTrain = False
+
+    imfs_id = 4
+
+
+    #for predict_hour in range(24,25):
+    model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+    #emd_day_by_day_test(model_disc)
+
+    pass
+
+def test_imfs_model(site):
+    epcoh = 50
+    window = 24     
+    
+    predict_hour = 1
+    dropout = 0.4
+    train_test_split = 0.99
+    forceTrain = False
+
+    imfs_id = 4
+
+
+    #for predict_hour in range(24,25):
+    model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
+    
+    #test_incemental_imfs(model_disc)
+    train_imfs_model(model_disc)
+
 
 def testEmdModel(site, predict_hour):
     epcoh = 50
@@ -315,8 +353,8 @@ def testEmdModel(site, predict_hour):
     #for predict_hour in range(24,25):
     model_disc = Emd_model_disc(predict_hour, window, TRAIN_TEST_SIZE, epcoh, dropout, imfs_id,site, train_test_split= train_test_split)
     
-    one_newlyTrained = False
-    one_newlyTrained = emdModels(model_disc, forceTraind = False)
+    one_newlyTrained = True
+    #one_newlyTrained = emdModels(model_disc, forceTraind = False)
     
     score_nwp, score_pre, score_up, score_bw_nwp, score_bw_pre, score_bw_up = val_emd_models(model_disc, one_newlyTrained)
 
@@ -349,7 +387,8 @@ if __name__ == '__main__':
 
     site = str(sites[site_idx])
 
-    testEmdModel(site, predict_hour)
+    #testEmdModel(site, predict_hour)
     #testCombindeEmdModels(site)
     #get_allsite_prediction(['18R','36L','MID1','18L','36R','MID2','01','19','MID3'])
-
+    #runEmdPerDay(site)
+    test_imfs_model(site)

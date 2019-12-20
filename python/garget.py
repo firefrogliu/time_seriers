@@ -3,6 +3,9 @@ import numpy as np
 import math
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import matplotlib.ticker as ticker
+from pandas import read_csv
+from constants import *
+
 
 def plotlines(data: list, lengeds: list, xlabel: str = None,  ylabel: str = None, xticks = None, xtick_space = 1, display_lenth = -1, savepath: str = None, show = False, figsize = (16,9)):
     plt.clf()
@@ -29,10 +32,20 @@ def plotlines(data: list, lengeds: list, xlabel: str = None,  ylabel: str = None
     if show:
         plt.show()
 
-def plotlines_multifigue(data: list, lengeds: list, xlabel: str = None,  ylabel: str = None, xticks = None, xtick_space = 1, display_lenth = -1,savepath: str = None, show = False, figsize = (16,9)):
+def plotlines_multifigue(data: list, lengeds: list = None, xlabel: str = None,  ylabel: str = None, xticks = None, xtick_space = 1, display_lenth = -1,savepath: str = None, show = False, figsize = (16,9)):
     plt.clf()
+    print('datalen is', len(data))
     fig, axs = plt.subplots(len(data), figsize= figsize)
-        
+    
+    print('lengeds is None')
+    if lengeds is None:
+        lengeds = []
+        for i in range(len(data)):
+            legend = []
+            for j in range(len(data[i])):
+                legend.append('None')
+            lengeds.append(legend)
+
     for i in range(len(data)):
         line_legends = []    
         ax = axs[i]
@@ -44,7 +57,7 @@ def plotlines_multifigue(data: list, lengeds: list, xlabel: str = None,  ylabel:
                 line, = ax.plot(data[i][j], label = lengeds[i][j])
             line_legends.append(line)
         ax.legend(handles = line_legends)
-        ax.xaxis.set_major_locator(ticker.MultipleLocator(xtick_space))
+        #ax.xaxis.set_major_locator(ticker.MultipleLocator(xtick_space))
 
     fig.add_subplot(111, frameon=False)
     plt.tick_params(labelcolor='none', top='off', bottom='off', left='off', right='off')    
@@ -58,7 +71,25 @@ def plotlines_multifigue(data: list, lengeds: list, xlabel: str = None,  ylabel:
     if show:
         plt.show()
 
+def read_dataframe(csvfile, datastart, dataend, ycolumn = 'wind'):
+    print('reawding', csvfile)
+    dataframe = read_csv(csvfile, usecols = CSV_COLUMNS,engine='python')
+    
+    dataset = dataframe.values[:]
+    dataset = dataset.astype('float32')
+    
+    dataframeY = read_csv(csvfile, usecols=[ycolumn], engine='python')
+    datasetY = dataframeY.values[:]
+    datasetY = datasetY.astype('float32')
 
+    if dataend == 'end':
+        dataset = dataset[datastart:, :]
+        datasetY = datasetY[datastart:, :]
+    else:   
+        dataset = dataset[datastart:dataend, :]
+        datasetY = datasetY[datastart:dataend, :]
+
+    return dataset, datasetY
 
 def cal_metrics(a,b, wind_bar = 4):
     bw_a = []
@@ -71,8 +102,10 @@ def cal_metrics(a,b, wind_bar = 4):
     testScore = math.sqrt(mean_squared_error(a, b))
     print('Test Score: %.3f RMSE' % (testScore))
 
-    bw_testScore = math.sqrt(mean_squared_error(bw_a, bw_b))
-    print('Big wind Test Score: %.3f RMSE' % (bw_testScore))
+    bw_testScore = 0.01
+    if len(bw_a) > 0:
+        bw_testScore = math.sqrt(mean_squared_error(bw_a, bw_b))
+        print('Big wind Test Score: %.3f RMSE' % (bw_testScore))
 
     return testScore, bw_testScore
 
@@ -116,4 +149,6 @@ if __name__ == '__main__':
     y1 = [2,5,6,6,8,]
     z = [1.2,3.3,4,5,7]
     z0 = [2,8,2,3,4]
-    plotlines_multifigue([[y, y1],[z,z0]], [['y', 'y1'],['z','z0']], xlabel = 'time', ylabel = 'wind', xticks=x, xtick_space=1, show = True)
+    z1 = z0[:-1]
+    print(z1)
+    #plotlines_multifigue([[y, y1],[z,z0]], [['y', 'y1'],['z','z0']], xlabel = 'time', ylabel = 'wind', xticks=x, xtick_space=1, show = True)
